@@ -1,8 +1,14 @@
 package com.blms;
 
+import com.blms.auth.LoginLockoutService;
 import com.blms.auth.Operator;
 import com.blms.auth.RbacService;
+import com.blms.common.ApiResult;
 import com.blms.common.AuditLog;
+import com.blms.common.CollReadController;
+import com.blms.common.SnapshotController;
+import com.blms.service.admin.DataScopeService;
+import com.blms.service.admin.UserAdminService;
 import com.blms.service.contract.ContractService;
 import com.blms.service.dispatch.DispatchService;
 import com.blms.service.exception.ExceptionService;
@@ -60,6 +66,11 @@ class FlowIntegrationTest {
     @Autowired ReportService reportService;
     @Autowired DashboardService dashboardService;
     @Autowired SchedulerService schedulerService;
+    @Autowired DataScopeService scope;
+    @Autowired UserAdminService userAdminService;
+    @Autowired CollReadController collRead;
+    @Autowired SnapshotController snapshotController;
+    @Autowired LoginLockoutService lockout;
 
     int pass = 0, fail = 0;
     final List<String> failures = new ArrayList<>();
@@ -1093,6 +1104,102 @@ class FlowIntegrationTest {
             check("守卫：已开票账单不可重复开具",
                     settlementService.issueInvoice(str(n5s, "id")).get("error") != null);
         }
+    }
+
+
+    /* ===================== A1：行级数据范围（服务端强制） ===================== */
+    @Test
+    @Order(90)
+    void a1_rowLevelDataScope() {
+        // 基线（平台管理员）：全量数据
+        List<Map<String, Object>> allDispatches = store.list("dispatches");
+        check("A1：平台管理员全量（无范围过滤）", scope.scopeRegions().isEmpty()
+                && scope.filter("dispatches", allDispatches).size() == allDispatches.size());
+        // 种子范围：user02 = 华北（V3 种子）
+        Map<String, Object> seedScope = userAdminService.dataScopeOf();
+        login("李芳", "user02", "调度员", "");
+        check("A1：调度员 user02 范围=华北", "华北".equals(String.valueOf(((List<?>) userAdminService.dataScopeOf().get("regions")).get(0))));
+        // 行级过滤：仅华北装货侧，且为真子集
+        List<Map<String, Object>> scoped = scope.filter("dispatches", store.list("dispatches"));
+        check("A1：调度单行级过滤（仅华北装货侧，真子集）",
+                !scoped.isEmpty() && scoped.size() < allDispatches.size()
+                        && scoped.stream().allMatch(d -> "华北".equals(regionOf(d))));
+        // 计划同样过滤
+        List<Map<String, Object>> scopedPlans = scope.filter("plans", store.list("plans"));
+        check("A1：计划行级过滤（仅华北装货侧）",
+                !scopedPlans.isEmpty() && scopedPlans.stream().allMatch(p -> "华北".equals(regionOf(p))));
+        // 合同经 loadTerminalId 派生（西北合同对华北范围不可见）
+        List<Map<String, Object>> scopedContracts = scope.filter("contracts", store.list("contracts"));
+        check("A1：合同行级过滤（仅华北装货侧）",
+                scopedContracts.stream().allMatch(c -> "华北".equals(regionOf(c))));
+        // 结算单经 contractId 派生
+        List<Map<String, Object>> scopedSettle = scope.filter("settlements", store.list("settlements"));
+        check("A1：结算单行级过滤（经合同装货侧派生）",
+                scopedSettle.stream().allMatch(x -> { String r = regionOf(x); return r == null || "华北".equals(r); }));
+        // 单条越权：华北范围访问西北调度单 → 403 forbidden
+        Map<String, Object> other = allDispatches.stream().filter(d -> !"华北".equals(regionOf(d))).findFirst().orElse(null);
+        if (other != null) {
+            ApiResult<Map<String, Object>> denied = collRead.one("dispatches", String.valueOf(other.get("id")));
+            check("A1：越权单条访问被拒（forbidden）", !denied.isOk() && "forbidden".equals(denied.getCode()));
+        }
+        // 平台管理员不受影响（全量）
+        login("张建国", "admin", "平台管理员", "");
+        check("A1：平台管理员不受数据范围影响（全量）",
+                scope.filter("dispatches", store.list("dispatches")).size() == store.list("dispatches").size());
+        // 守卫：平台管理员不可被限制
+        Map<String, Object> guard = userAdminService.setDataScope("admin", List.of("华北"));
+        check("A1：守卫：平台管理员不可被限制", guard.get("error") != null);
+        // 守卫：无效区域被拒
+        Map<String, Object> guard2 = userAdminService.setDataScope("user02", List.of("华北", "火星"));
+        check("A1：守卫：包含无效区域被拒", guard2.get("error") != null);
+        // 快照端点同样过滤（user02 视角 dispatches 仅华北）
+        login("李芳", "user02", "调度员", "");
+        ApiResult<Map<String, Object>> snap = snapshotController.snapshot();
+        List<?> snapDispatches = (List<?>) snap.getData().get("dispatches");
+        check("A1：快照端点行级过滤（user02 仅华北调度单）",
+                !snapDispatches.isEmpty() && snapDispatches.size() < allDispatches.size()
+                        && snapDispatches.stream().allMatch(d -> "华北".equals(regionOf((Map<String, Object>) d))));
+        // 恢复种子范围（user02=华北 已由种子保证；此处显式重置避免污染后续环节）
+        login("张建国", "admin", "平台管理员", "");
+        userAdminService.setDataScope("user02", List.of("华北"));
+    }
+
+    private String regionOf(Map<String, Object> rec) {
+        Map<String, Object> t = byId("terminals", str(rec, "loadTerminalId"));
+        return t == null ? null : str(t, "region");
+    }
+
+    /* ===================== A2：登录防爆破（服务端权威，Redis 按账号） ===================== */
+    @Test
+    @Order(91)
+    void a2_loginLockout() {
+        String u = "locktest-" + System.nanoTime();
+        lockout.clear(u);
+        // 前 4 次失败：未锁定，剩余机会递减
+        LoginLockoutService.LockResult r1 = lockout.recordFailure(u);
+        check("A2：第 1 次失败未锁定（剩 4 次）", !r1.locked() && r1.remaining() == 4);
+        lockout.recordFailure(u);
+        lockout.recordFailure(u);
+        LoginLockoutService.LockResult r4 = lockout.recordFailure(u);
+        check("A2：第 4 次失败未锁定（剩 1 次）", !r4.locked() && r4.remaining() == 1);
+        // 第 5 次失败：进入 5 分钟锁定
+        LoginLockoutService.LockResult r5 = lockout.recordFailure(u);
+        check("A2：第 5 次失败触发 5 分钟锁定", r5.locked() && r5.remaining() == 300);
+        check("A2：锁定中剩余秒数>0", lockout.lockRemainingSeconds(u) != null && lockout.lockRemainingSeconds(u) > 0);
+        // 锁定期间访问即拦截（AuthService 前置检查）
+        // 成功登录清零：先解锁（模拟成功后 clear）
+        lockout.clear(u);
+        check("A2：成功后清零（解锁）", lockout.lockRemainingSeconds(u) == null);
+        // 清零后重新计数（不残留）
+        LoginLockoutService.LockResult r6 = lockout.recordFailure(u);
+        check("A2：清零后重新计数（剩 4 次）", !r6.locked() && r6.remaining() == 4);
+        lockout.clear(u);
+        // 大小写/空白归一（按账号维度）
+        lockout.recordFailure("  CASE-Test ");
+        lockout.recordFailure("case-test");
+        LoginLockoutService.LockResult r7 = lockout.recordFailure("CASE-TEST");
+        check("A2：账号维度归一（大小写/空白不绕过）", r7.remaining() == 2);
+        lockout.clear("case-test");
     }
 
     @AfterAll

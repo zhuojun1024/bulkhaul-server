@@ -1,0 +1,26 @@
+# 生产 profile（-Dspring.profiles.active=prod 或 SPRING_PROFILES_ACTIVE=prod 启用）。
+# 敏感项必须经环境变量注入，本文件不提供 dev 默认值（缺省即启动失败，避免误用演示密钥上线）。
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+
+blms:
+  jwt:
+    secret: ${JWT_SECRET}
+    ttl-minutes: ${JWT_TTL_MINUTES:480}
+  scheduler:
+    auto-enabled: ${SCHEDULER_AUTO_ENABLED:true}
+
+logging:
+  level:
+    com.blms: ${LOG_LEVEL_COM_BLMS:info}
