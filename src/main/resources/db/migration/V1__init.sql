@@ -1,0 +1,576 @@
+-- 大宗物流综合管理平台 初始化表结构（从前端种子数据 dump-schema.json 反推）
+-- 生成工具：scripts/gen-ddl.mjs；复核后手工微调金额/日期精度
+
+SET NAMES utf8mb4;
+
+CREATE TABLE `commodity` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `category` VARCHAR(255) NOT NULL DEFAULT '',
+  `unit` VARCHAR(255) NOT NULL DEFAULT '',
+  `density` DECIMAL(5,3) NOT NULL DEFAULT 0,
+  `price` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `indicators` JSON NULL,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `total_volume` INT NOT NULL DEFAULT 0,
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `customer` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `type` VARCHAR(255) NOT NULL DEFAULT '',
+  `region` VARCHAR(255) NOT NULL DEFAULT '',
+  `address` VARCHAR(255) NOT NULL DEFAULT '',
+  `level` VARCHAR(255) NOT NULL DEFAULT '',
+  `contact` VARCHAR(255) NOT NULL DEFAULT '',
+  `phone` VARCHAR(255) NOT NULL DEFAULT '',
+  `credit_limit` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `total_business` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `join_date` DATE NULL,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `terminal` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `type` VARCHAR(255) NOT NULL DEFAULT '',
+  `region` VARCHAR(255) NOT NULL DEFAULT '',
+  `address` VARCHAR(255) NOT NULL DEFAULT '',
+  `capacity` INT NOT NULL DEFAULT 0,
+  `warehouse_id` VARCHAR(255) NULL DEFAULT '',
+  `contact` VARCHAR(255) NOT NULL DEFAULT '',
+  `phone` VARCHAR(255) NOT NULL DEFAULT '',
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `today_throughput` INT NOT NULL DEFAULT 0,
+  `queue_vehicles` INT NOT NULL DEFAULT 0,
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `vehicle` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `plate` VARCHAR(255) NOT NULL DEFAULT '',
+  `type` VARCHAR(255) NOT NULL DEFAULT '',
+  `capacity` INT NOT NULL DEFAULT 0,
+  `owner` VARCHAR(255) NOT NULL DEFAULT '',
+  `fuel_type` VARCHAR(255) NOT NULL DEFAULT '',
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `version` INT NOT NULL DEFAULT 0,
+  `purchase_date` DATE NULL,
+  `next_inspection` DATE NULL,
+  `mileage` INT NOT NULL DEFAULT 0,
+  `monthly_cost` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `driver` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `phone` VARCHAR(255) NOT NULL DEFAULT '',
+  `license_type` VARCHAR(255) NOT NULL DEFAULT '',
+  `license_no` VARCHAR(255) NOT NULL DEFAULT '',
+  `license_expire` DATE NULL,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `version` INT NOT NULL DEFAULT 0,
+  `rating` DECIMAL(5,3) NOT NULL DEFAULT 0,
+  `total_trips` INT NOT NULL DEFAULT 0,
+  `total_mileage` INT NOT NULL DEFAULT 0,
+  `join_date` DATE NULL,
+  `emergency_contact` VARCHAR(255) NOT NULL DEFAULT '',
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `contract` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `shipper_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `consignee_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `commodity_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `mode` VARCHAR(255) NOT NULL DEFAULT '',
+  `load_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `unload_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `quantity` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `unit_price` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `payment_days` INT NOT NULL DEFAULT 0,
+  `start_date` DATE NULL,
+  `end_date` DATE NULL,
+  `sign_date` DATE NULL,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `progress` DECIMAL(5,3) NOT NULL DEFAULT 0,
+  `approval_chain` JSON NULL,
+  `contact` VARCHAR(255) NOT NULL DEFAULT '',
+  `phone` VARCHAR(255) NOT NULL DEFAULT '',
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `transport_request` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `customer_id` VARCHAR(255) NULL DEFAULT '',
+  `consignee_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `commodity_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `quantity` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `load_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `unload_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `mode` VARCHAR(255) NOT NULL DEFAULT '',
+  `expect_date` DATE NULL,
+  `unit_price` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `create_time` DATETIME NULL,
+  `contract_id` VARCHAR(255) NULL DEFAULT '',
+  `reject_reason` VARCHAR(255) NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `transport_plan` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `contract_id` VARCHAR(255) NULL DEFAULT '',
+  `commodity_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `quantity` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `load_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `unload_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `mode` VARCHAR(255) NOT NULL DEFAULT '',
+  `plan_date` DATE NULL,
+  `unit_price` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `progress` DECIMAL(5,3) NOT NULL DEFAULT 0,
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `dispatch` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `plan_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `contract_id` VARCHAR(255) NULL DEFAULT '',
+  `commodity_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `quantity` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `load_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `unload_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `vehicle_id` VARCHAR(255) NULL DEFAULT '',
+  `driver_id` VARCHAR(255) NULL DEFAULT '',
+  `distance` INT NOT NULL DEFAULT 0,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `accepted` TINYINT NOT NULL DEFAULT 0,
+  `dispatch_time` DATETIME NULL,
+  `load_time` DATETIME NULL,
+  `unload_time` DATETIME NULL,
+  `progress` DECIMAL(5,3) NOT NULL DEFAULT 0,
+  `speed` DECIMAL(14,3) NOT NULL DEFAULT 0,
+  `eta` DATETIME NULL,
+  `fee` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `unit_price` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `receipt` JSON NULL,
+  `quality` JSON NULL,
+  `mode` VARCHAR(255) NOT NULL DEFAULT '',
+  `unit_no` VARCHAR(255) NOT NULL DEFAULT '',
+  `settled` TINYINT NOT NULL DEFAULT 0,
+  `settlement_id` VARCHAR(255) NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `weighing` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `dispatch_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `plate` VARCHAR(255) NOT NULL DEFAULT '',
+  `terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `type` VARCHAR(255) NOT NULL DEFAULT '',
+  `gross` DECIMAL(14,3) NOT NULL DEFAULT 0,
+  `tare` DECIMAL(14,3) NOT NULL DEFAULT 0,
+  `net` DECIMAL(14,3) NOT NULL DEFAULT 0,
+  `time` DATETIME NULL,
+  `operator` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `warehouse` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `type` VARCHAR(255) NOT NULL DEFAULT '',
+  `address` VARCHAR(255) NOT NULL DEFAULT '',
+  `capacity` INT NOT NULL DEFAULT 0,
+  `manager` VARCHAR(255) NOT NULL DEFAULT '',
+  `used` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `phone` VARCHAR(255) NOT NULL DEFAULT '',
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `inventory` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `warehouse_id` VARCHAR(255) NULL DEFAULT '',
+  `commodity_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `batch` VARCHAR(255) NOT NULL DEFAULT '',
+  `quantity` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `in_date` DATE NULL,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `settlement` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `bill_no` VARCHAR(255) NOT NULL DEFAULT '',
+  `contract_id` VARCHAR(255) NULL DEFAULT '',
+  `customer_id` VARCHAR(255) NULL DEFAULT '',
+  `period` VARCHAR(255) NOT NULL DEFAULT '',
+  `dispatch_count` INT NOT NULL DEFAULT 0,
+  `dispatch_quantity` INT NOT NULL DEFAULT 0,
+  `total_quantity` DECIMAL(14,3) NOT NULL DEFAULT 0,
+  `loss_qty` DECIMAL(14,3) NOT NULL DEFAULT 0,
+  `freight` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `loading_fee` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `unloading_fee` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `loss_deduction` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `quality_qty` DECIMAL(14,3) NOT NULL DEFAULT 0,
+  `quality_deduction` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `exception_loss` DECIMAL(14,3) NOT NULL DEFAULT 0,
+  `toll_fee` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `surcharge` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `total_amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `paid_amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `settle_date` DATE NULL,
+  `invoice_status` VARCHAR(255) NOT NULL DEFAULT '',
+  `reconciliation` JSON NULL,
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `payment` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `settlement_id` VARCHAR(255) NULL DEFAULT '',
+  `amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `pay_time` DATETIME NULL,
+  `method` VARCHAR(255) NOT NULL DEFAULT '',
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `prepayment` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `customer_id` VARCHAR(255) NULL DEFAULT '',
+  `amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `used` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `time` DATETIME NULL,
+  `method` VARCHAR(255) NOT NULL DEFAULT '',
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `payable` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `dispatch_id` VARCHAR(32) NOT NULL,
+  `driver_id` VARCHAR(32) NULL,
+  `vehicle_id` VARCHAR(32) NOT NULL,
+  `commodity_id` VARCHAR(32) NOT NULL,
+  `trip_fee` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `freight` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `total_amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `status` VARCHAR(32) NOT NULL,
+  `due_date` DATE NULL,
+  `paid_date` DATETIME NULL,
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_dispatch_id` (dispatch_id),
+  KEY `idx_driver_id` (driver_id),
+  KEY `idx_vehicle_id` (vehicle_id),
+  KEY `idx_commodity_id` (commodity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `dunning` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `settlement_id` VARCHAR(32) NULL,
+  `customer_id` VARCHAR(32) NULL,
+  `round_no` INT NOT NULL DEFAULT 0,
+  `level` VARCHAR(32) NOT NULL,
+  `amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `sent_at` DATETIME NULL,
+  `due_date` DATE NULL,
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_settlement_id` (settlement_id),
+  KEY `idx_customer_id` (customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `bank_record` (
+  `account_no` VARCHAR(255) NOT NULL DEFAULT '',
+  `counterparty` VARCHAR(255) NOT NULL DEFAULT '',
+  `amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `time` DATETIME NULL,
+  `summary` VARCHAR(255) NOT NULL DEFAULT '',
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `settlement_id` VARCHAR(255) NULL DEFAULT '',
+  `match_time` DATETIME NULL,
+  `match_by` VARCHAR(255) NULL DEFAULT '',
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `invoice` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `settlement_id` VARCHAR(255) NULL DEFAULT '',
+  `invoice_no` VARCHAR(255) NOT NULL DEFAULT '',
+  `type` VARCHAR(255) NOT NULL DEFAULT '',
+  `amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `issue_date` DATE NULL,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `message` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `title` VARCHAR(255) NOT NULL DEFAULT '',
+  `content` TEXT NULL,
+  `type` VARCHAR(255) NOT NULL DEFAULT '',
+  `path` VARCHAR(255) NOT NULL DEFAULT '',
+  `time` DATETIME NULL,
+  `read` TINYINT NOT NULL DEFAULT 0,
+  `to` JSON NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `exception` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `dispatch_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `type` VARCHAR(255) NOT NULL DEFAULT '',
+  `level` VARCHAR(255) NOT NULL DEFAULT '',
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `occur_time` DATETIME NULL,
+  `handler` VARCHAR(255) NOT NULL DEFAULT '',
+  `description` TEXT NULL,
+  `result` VARCHAR(255) NOT NULL DEFAULT '',
+  `cost` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `accident_id` VARCHAR(255) NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `accident` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `time` DATE NULL,
+  `type` VARCHAR(255) NOT NULL DEFAULT '',
+  `level` VARCHAR(255) NOT NULL DEFAULT '',
+  `vehicle_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `plate` VARCHAR(255) NOT NULL DEFAULT '',
+  `location` VARCHAR(255) NOT NULL DEFAULT '',
+  `description` TEXT NULL,
+  `handling` TEXT NULL,
+  `loss` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `exception_id` VARCHAR(255) NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `training` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `title` VARCHAR(255) NOT NULL DEFAULT '',
+  `date` DATE NULL,
+  `trainer` VARCHAR(255) NOT NULL DEFAULT '',
+  `participants` INT NOT NULL DEFAULT 0,
+  `driver_ids` JSON NULL,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `inspection` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `vehicle_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `plate` VARCHAR(255) NOT NULL DEFAULT '',
+  `date` DATE NULL,
+  `item` VARCHAR(255) NOT NULL DEFAULT '',
+  `result` VARCHAR(255) NOT NULL DEFAULT '',
+  `inspector` VARCHAR(255) NOT NULL DEFAULT '',
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `sys_user` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `username` VARCHAR(255) NOT NULL DEFAULT '',
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `role` VARCHAR(255) NOT NULL DEFAULT '',
+  `password_hash` VARCHAR(255) NOT NULL DEFAULT '',
+  `phone` VARCHAR(255) NOT NULL DEFAULT '',
+  `email` VARCHAR(255) NULL DEFAULT '',
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `last_login` DATETIME NULL,
+  `customer_id` VARCHAR(255) NULL DEFAULT '',
+  `driver_id` VARCHAR(255) NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `sys_role` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `name` VARCHAR(255) NOT NULL DEFAULT '',
+  `code` VARCHAR(255) NOT NULL DEFAULT '',
+  `user_count` INT NOT NULL DEFAULT 0,
+  `description` TEXT NULL,
+  `built_in` TINYINT NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `fence_config` (
+  id INT PRIMARY KEY DEFAULT 1,
+  `enabled` TINYINT,
+  `deviateLimit` INT,
+  `delayMinutes` INT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `safety_stock` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `warehouse_id` VARCHAR(255) NULL DEFAULT '',
+  `commodity_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `min_qty` INT NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `rate_card` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `commodity_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `load_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `unload_terminal_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `mode` VARCHAR(255) NOT NULL DEFAULT '',
+  `unit_price` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `effective_date` DATE NULL,
+  `status` VARCHAR(255) NOT NULL DEFAULT '',
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `history` JSON NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `insurance_claim` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `accident_id` VARCHAR(32) NULL,
+  `exception_id` VARCHAR(32) NULL,
+  `policy_no` VARCHAR(64) NULL,
+  `insurer` VARCHAR(128) NULL,
+  `claim_amount` DECIMAL(16,2) NOT NULL DEFAULT 0,
+  `liability` VARCHAR(64) NOT NULL,
+  `status` VARCHAR(32) NOT NULL,
+  `reported_at` DATETIME NULL,
+  `settled_at` DATETIME NULL,
+  `remark` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_accident_id` (accident_id),
+  KEY `idx_exception_id` (exception_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `escalate_config` (
+  id INT PRIMARY KEY DEFAULT 1,
+  `exceptionHours` INT,
+  `contractHours` INT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `op_log` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `time` DATETIME NULL,
+  `user` VARCHAR(255) NOT NULL DEFAULT '',
+  `username` VARCHAR(255) NOT NULL DEFAULT '',
+  `action` VARCHAR(255) NOT NULL DEFAULT '',
+  `module` VARCHAR(255) NOT NULL DEFAULT '',
+  `ip` VARCHAR(255) NOT NULL DEFAULT '',
+  `result` VARCHAR(255) NOT NULL DEFAULT '',
+  `detail` TEXT NULL COMMENT '操作详情（logAction detail 字段）',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `announcement` (
+  `id` VARCHAR(32) NOT NULL COMMENT '业务ID（前缀+序列，删除不复用）',
+  `title` VARCHAR(255) NOT NULL DEFAULT '',
+  `date` VARCHAR(255) NOT NULL DEFAULT '',
+  `tag` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `sys_role_perm` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `role_name` VARCHAR(64) NOT NULL,
+  `menus` JSON NULL COMMENT 'null=全部菜单，[]=无',
+  `actions` JSON NULL COMMENT 'null=全部操作码，[]=无',
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY `uk_role` (`role_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `user_dnd` (
+  `username` VARCHAR(64) PRIMARY KEY,
+  `enabled` TINYINT NOT NULL DEFAULT 0,
+  `quiet_start` VARCHAR(8) NOT NULL DEFAULT '22:00',
+  `quiet_end` VARCHAR(8) NOT NULL DEFAULT '08:00',
+  `muted_types` JSON NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `user_data_scope` (
+  `username` VARCHAR(64) PRIMARY KEY,
+  `regions` JSON NULL COMMENT '空/缺省=全量数据'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
