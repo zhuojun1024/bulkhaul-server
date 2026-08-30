@@ -1,0 +1,15 @@
+# Maven 产物
+target/
+# 本地配置/密钥（勿入镜像）
+.env
+.env.*
+!.env.example
+# IDE / VCS
+.idea/
+*.iml
+.vscode/
+.git/
+.gitignore
+# 部署工件（compose 不需入镜像）
+docker-compose*.yml
+deploy/
