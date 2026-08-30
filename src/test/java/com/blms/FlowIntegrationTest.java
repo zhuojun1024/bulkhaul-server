@@ -1268,6 +1268,48 @@ class FlowIntegrationTest {
         check("A3：clearAll 自恢复（清空后重新放行）", rateLimit.tryAcquire(RateLimitService.TIER_LOGIN, dim) == null);
     }
 
+    // ===================== B2：分页（列表端点 page/size → {list,total}，向后兼容全量） =====================
+    @Test @Order(15)
+    void b2_pagination() {
+        int total = store.list("dispatches").size();
+        // 向后兼容：不带 page → 全量（List，与旧行为一致）
+        ApiResult<Object> full = collRead.list("dispatches", null, null);
+        check("B2：不带 page → 全量返回（向后兼容）", full.isOk() && full.getData() instanceof List<?> l && l.size() == total);
+        // page=1 size=20 → {list,total,page,size}
+        @SuppressWarnings("unchecked")
+        Map<String, Object> p1 = (Map<String, Object>) collRead.list("dispatches", 1, 20).getData();
+        check("B2：page=1 size=20 → list 20 条 + total=" + total,
+                p1 != null && ((List<?>) p1.get("list")).size() == Math.min(20, total)
+                        && (int) p1.get("total") == total && (int) p1.get("page") == 1 && (int) p1.get("size") == 20);
+        // page=2 → 与 page=1 不同记录（无重叠），total 一致
+        if (total > 20) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> p2 = (Map<String, Object>) collRead.list("dispatches", 2, 20).getData();
+            check("B2：page=2 → 与 page=1 不同记录（无重叠）+ total 一致",
+                    !((List<?>) p2.get("list")).get(0).equals(((List<?>) p1.get("list")).get(0))
+                            && (int) p2.get("total") == total);
+        }
+        // 超范围页 → 空 list + total 不变
+        @SuppressWarnings("unchecked")
+        Map<String, Object> po = (Map<String, Object>) collRead.list("dispatches", 99999, 20).getData();
+        check("B2：超范围页 → 空 list + total 不变", ((List<?>) po.get("list")).isEmpty() && (int) po.get("total") == total);
+        // size 上限 200
+        @SuppressWarnings("unchecked")
+        Map<String, Object> ps = (Map<String, Object>) collRead.list("dispatches", 1, 1000).getData();
+        check("B2：size 上限 200（size=1000 → 200）", (int) ps.get("size") == 200);
+        // 行级数据范围（A1）与分页叠加：user02（华北）total = 华北行数，页内全为华北
+        login("李芳", "user02", "调度员", "");
+        int scopedTotal = scope.filter("dispatches", store.list("dispatches")).size();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> up = (Map<String, Object>) collRead.list("dispatches", 1, 20).getData();
+        check("B2：行级+分页（user02 total=华北行数，页内全为华北）",
+                (int) up.get("total") == scopedTotal
+                        && ((List<?>) up.get("list")).stream().allMatch(x -> "华北".equals(regionOf((Map<String, Object>) x))));
+        // 恢复种子范围（setDataScope 需平台管理员权限，先切回 admin）
+        login("张建国", "admin", "平台管理员", "");
+        userAdminService.setDataScope("user02", List.of("华北"));
+    }
+
     @AfterAll
     void summary() {
         System.out.println("\n========== 环节 1-2 汇总 ==========");

@@ -5,8 +5,11 @@ import com.blms.store.DataStore;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,15 +31,34 @@ public class CollReadController {
         this.scope = scope;
     }
 
+    /**
+     * 列表（B2 分页）：
+     *  - 不带 page → 全量返回（向后兼容：/api/snapshot hydrate、验证脚本、旧前端客户端分页均不受影响）；
+     *  - 带 page → {list, total, page, size}（列表页按页加载，不再拉全量；size 默认 20，上限 200）。
+     * 行级数据范围（A1）：区域集合先按当前操作人过滤，total=过滤后行数（分页与行级过滤叠加正确）。
+     */
     @GetMapping("/{name}")
-    public ApiResult<List<Map<String, Object>>> list(@PathVariable String name) {
-        if (DataStore.LIST_COLLS.contains(name)) {
-            return ApiResult.success(DataScopeService.REGION_SCOPED.contains(name)
-                    ? scope.filter(name, store.list(name))
-                    : store.list(name));
+    public ApiResult<Object> list(@PathVariable String name,
+                                  @RequestParam(required = false) Integer page,
+                                  @RequestParam(required = false) Integer size) {
+        if (!DataStore.LIST_COLLS.contains(name)) {
+            if (DataStore.OBJ_COLLS.contains(name)) return ApiResult.success(List.of(store.obj(name)));
+            return ApiResult.fail("未知集合: " + name, "not-found");
         }
-        if (DataStore.OBJ_COLLS.contains(name)) return ApiResult.success(List.of(store.obj(name)));
-        return ApiResult.fail("未知集合: " + name, "not-found");
+        List<Map<String, Object>> rows = DataScopeService.REGION_SCOPED.contains(name)
+                ? scope.filter(name, store.list(name))
+                : store.list(name);
+        if (page == null) return ApiResult.success(rows); // 向后兼容：全量
+        int p = Math.max(1, page);
+        int s = size == null || size < 1 ? 20 : Math.min(size, 200);
+        int from = Math.min((p - 1) * s, rows.size());
+        int to = Math.min(from + s, rows.size());
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("list", new ArrayList<>(rows.subList(from, to))); // 拷贝，不暴露活视图
+        data.put("total", rows.size());
+        data.put("page", p);
+        data.put("size", s);
+        return ApiResult.success(data);
     }
 
     @GetMapping("/{name}/{id}")
