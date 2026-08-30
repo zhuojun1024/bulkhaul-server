@@ -1,6 +1,7 @@
 package com.blms.service.settlement;
 
 import com.blms.common.ApiResult;
+import com.blms.common.OptimisticLockSupport;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,60 +33,71 @@ public class SettlementController {
     }
 
     @PostMapping("/{id}/startReconcile")
-    public ApiResult<Map<String, Object>> startReconcile(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> startReconcile(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.startReconcile(id));
     }
 
     @PostMapping("/{id}/recalc")
-    public ApiResult<Map<String, Object>> recalc(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> recalc(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.recalcSettlement(id));
     }
 
     @PostMapping("/{id}/customerConfirm")
-    public ApiResult<Map<String, Object>> customerConfirm(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> customerConfirm(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.customerConfirm(id));
     }
 
     @PostMapping("/{id}/customerObjection")
-    public ApiResult<Map<String, Object>> customerObjection(@PathVariable String id, @RequestBody Map<String, String> body) {
-        return ApiResult.success(service.customerObjection(id, body.get("reason")));
+    public ApiResult<Map<String, Object>> customerObjection(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
+        return ApiResult.success(service.customerObjection(id, body.get("reason") == null ? null : String.valueOf(body.get("reason"))));
     }
 
     @PostMapping("/{id}/confirmSettle")
-    public ApiResult<Map<String, Object>> confirmSettle(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> confirmSettle(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.confirmSettle(id));
     }
 
     @PostMapping("/{id}/recordPayment")
     public ApiResult<Map<String, Object>> recordPayment(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
         double amount = body.get("amount") == null ? 0 : ((Number) body.get("amount")).doubleValue();
         return ApiResult.success(service.recordPayment(id, amount, String.valueOf(body.getOrDefault("method", "银行转账"))));
     }
 
     @PostMapping("/{id}/revertPayment/{paymentId}")
-    public ApiResult<Map<String, Object>> revertPayment(@PathVariable String id, @PathVariable String paymentId, @RequestBody Map<String, String> body) {
-        return ApiResult.success(service.revertPayment(id, paymentId, body.get("reason")));
+    public ApiResult<Map<String, Object>> revertPayment(@PathVariable String id, @PathVariable String paymentId, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
+        return ApiResult.success(service.revertPayment(id, paymentId, body.get("reason") == null ? null : String.valueOf(body.get("reason"))));
     }
 
     @PostMapping("/{id}/applyPrepayment")
     public ApiResult<Map<String, Object>> applyPrepayment(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
         double amount = body.get("amount") == null ? 0 : ((Number) body.get("amount")).doubleValue();
         return ApiResult.success(service.applyPrepayment(id, amount));
     }
 
     @PostMapping("/{id}/dunning")
-    public ApiResult<Map<String, Object>> dunning(@PathVariable String id, @RequestBody Map<String, String> body) {
-        return ApiResult.success(service.dunning(id, body.getOrDefault("level", "reminder")));
+    public ApiResult<Map<String, Object>> dunning(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
+        return ApiResult.success(service.dunning(id, String.valueOf(body.getOrDefault("level", "reminder"))));
     }
 
     @PostMapping("/{id}/issueInvoice")
-    public ApiResult<Map<String, Object>> issueInvoice(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> issueInvoice(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.issueInvoice(id));
     }
 
     @PostMapping("/invoice/{invoiceId}/redFlush")
-    public ApiResult<Map<String, Object>> redFlush(@PathVariable String invoiceId, @RequestBody Map<String, String> body) {
-        return ApiResult.success(service.redFlushInvoiceRow(invoiceId, body.get("reason")));
+    public ApiResult<Map<String, Object>> redFlush(@PathVariable String invoiceId, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(invoiceId, body);
+        return ApiResult.success(service.redFlushInvoiceRow(invoiceId, body.get("reason") == null ? null : String.valueOf(body.get("reason"))));
     }
 
     @PostMapping("/prepayment/collect")

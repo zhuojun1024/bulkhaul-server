@@ -24,6 +24,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResult.fail("无访问权限", "forbidden"));
     }
 
+    @ExceptionHandler(OptimisticLockException.class)
+    public ResponseEntity<ApiResult<Void>> conflict(OptimisticLockException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResult.fail(e.getMessage(), "conflict"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResult<Void>> internal(Exception e) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

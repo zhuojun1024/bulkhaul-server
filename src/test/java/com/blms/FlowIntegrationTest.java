@@ -6,6 +6,8 @@ import com.blms.auth.RbacService;
 import com.blms.common.ApiResult;
 import com.blms.common.AuditLog;
 import com.blms.common.CollReadController;
+import com.blms.common.OptimisticLockContext;
+import com.blms.common.OptimisticLockException;
 import com.blms.common.SnapshotController;
 import com.blms.service.admin.DataScopeService;
 import com.blms.service.admin.UserAdminService;
@@ -1200,6 +1202,47 @@ class FlowIntegrationTest {
         LoginLockoutService.LockResult r7 = lockout.recordFailure("CASE-TEST");
         check("A2：账号维度归一（大小写/空白不绕过）", r7.remaining() == 2);
         lockout.clear("case-test");
+    }
+
+    // ===================== B3：乐观锁（version 不匹配 → 409 + 无静默覆盖 + 恢复权威态） =====================
+    @Test @Order(13)
+    void b3_optimisticLock() {
+        Map<String, Object> rec = byId("dispatches", "YH-0001");
+        if (rec == null) rec = store.list("dispatches").get(0);
+        String id = str(rec, "id");
+        int v0 = rec.get("version") instanceof Number n ? n.intValue() : 1;
+
+        // 会话 A：登记期望版本 v0（与当前一致）→ commitAll 通过 + version 递增
+        rec.put("remark", "B3-会话A");
+        OptimisticLockContext.expect(id, v0);
+        store.commitAll();
+        Map<String, Object> afterA = byId("dispatches", id);
+        int vA = afterA.get("version") instanceof Number nn ? nn.intValue() : 1;
+        check("B3：版本匹配 → 提交成功且 version 递增", vA == v0 + 1 && "B3-会话A".equals(str(afterA, "remark")));
+
+        // 会话 B：基于过期版本 v0 修改（当前已是 v0+1）→ 409 冲突 + 无静默覆盖 + 恢复权威态
+        afterA.put("remark", "B3-会话B-覆盖");
+        OptimisticLockContext.expect(id, v0); // 过期版本
+        boolean conflict = false;
+        try {
+            store.commitAll();
+        } catch (OptimisticLockException e) {
+            conflict = true;
+        }
+        Map<String, Object> afterB = byId("dispatches", id);
+        int vB = afterB.get("version") instanceof Number vv ? vv.intValue() : 1;
+        check("B3：版本不匹配 → 抛 OptimisticLockException（→409）", conflict);
+        check("B3：无静默覆盖（DB 保持会话 A 权威态，非会话 B 覆盖）",
+                "B3-会话A".equals(str(afterB, "remark")) && vB == v0 + 1);
+
+        // 会话 C：基于当前版本 v0+1 修改 → 通过（证明恢复后可继续正常写）
+        afterB.put("remark", "B3-会话C");
+        OptimisticLockContext.expect(id, v0 + 1);
+        store.commitAll();
+        Map<String, Object> afterC = byId("dispatches", id);
+        int vC = afterC.get("version") instanceof Number cc ? cc.intValue() : 1;
+        check("B3：恢复后基于新版本可继续提交（version → v0+2）",
+                "B3-会话C".equals(str(afterC, "remark")) && vC == v0 + 2);
     }
 
     @AfterAll

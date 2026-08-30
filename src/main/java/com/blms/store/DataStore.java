@@ -1,5 +1,7 @@
 package com.blms.store;
 
+import com.blms.common.OptimisticLockContext;
+import com.blms.common.OptimisticLockException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -47,6 +49,9 @@ public class DataStore {
     /** 对象型集合清单（与 gen-biz-seed.mjs 的 OBJ 一致） */
     public static final List<String> OBJ_COLLS = List.of(
             "rolePerms", "fenceConfig", "escalateConfig", "dnd", "dataScopes");
+    /** B3 乐观锁核心集合（可变业务记录，payload 携带 version 字段；前端据此发 expectedVersion） */
+    public static final List<String> CORE_COLLS = List.of(
+            "contracts", "transportRequests", "plans", "dispatches", "settlements", "weighings", "invoices");
 
     @PostConstruct
     public void load() {
@@ -165,8 +170,29 @@ public class DataStore {
     public void commitAll() {
         writeLock.lock();
         try {
+            // B3 乐观锁：写锁内比对本请求登记的期望版本（与业务改内存互斥，无竞态）。
+            // 不匹配 → 抛 OptimisticLockException（→ 409）；匹配 → version+1（乐观锁写标记）后随 payload 持久化。
+            // 未登记（直接 service 调用 / 定时任务 / 未参与乐观锁的写）→ 空 map → no-op。
+            Map<String, Integer> expected = OptimisticLockContext.drain();
+            if (!expected.isEmpty()) {
+                for (Map.Entry<String, Integer> e : expected.entrySet()) {
+                    Map<String, Object> rec = findRecord(e.getKey());
+                    if (rec == null) continue; // 记录已被删除：无从比对，跳过（写操作自身会因记录缺失而失败）
+                    int current = rec.get("version") instanceof Number n ? n.intValue() : 1;
+                    if (current != e.getValue()) {
+                        // 版本不匹配：本请求基于过期态修改。service 已改内存（未持久化），
+                        // 先从 DB 恢复该记录为权威态（撤销本次孤儿改动，避免内存与 DB 不一致），再抛 409。
+                        String coll = findRecordCollection(e.getKey());
+                        if (coll != null) restoreRecordFromDb(coll, e.getKey());
+                        throw new OptimisticLockException("数据已变更（" + e.getKey() + " 版本 " + e.getValue() + " → " + current + "），请刷新后重试");
+                    }
+                    rec.put("version", current + 1);
+                }
+            }
             for (String coll : LIST_COLLS) {
                 List<Map<String, Object>> rows = lists.get(coll);
+                // B3 乐观锁：核心集合记录持久化前确保 payload 携带 version（运行时新建记录 V6 迁移覆盖不到，此处兜底）
+                ensureCoreVersions(coll, rows);
                 jdbc.update("DELETE FROM biz_" + coll);
                 if (!rows.isEmpty()) {
                     List<Object[]> batchArgs = new ArrayList<>();
@@ -183,6 +209,8 @@ public class DataStore {
                 jdbc.update("INSERT INTO biz_" + coll + " (id, payload) VALUES (?, ?)",
                         coll, om.writeValueAsString(objects.get(coll)));
             }
+        } catch (OptimisticLockException e) {
+            throw e; // B3 乐观锁冲突：原样抛出 → GlobalExceptionHandler 映射 409（勿包成 500）
         } catch (Exception e) {
             throw new RuntimeException("回写数据仓库失败", e);
         } finally {
@@ -255,6 +283,50 @@ public class DataStore {
                 break;
             default:
                 // 非核心集合：无派生列，no-op
+        }
+    }
+
+    /** B3 乐观锁：核心集合记录持久化前确保 payload 携带 version（缺失/非数字 → 置 1；已有版本不覆盖，含乐观锁递增后的值） */
+    private void ensureCoreVersions(String coll, List<Map<String, Object>> rows) {
+        if (!CORE_COLLS.contains(coll)) return;
+        for (Map<String, Object> r : rows) {
+            if (!(r.get("version") instanceof Number)) r.put("version", 1);
+        }
+    }
+
+    /** 按 id 在全部数组集合中查找记录（B3 乐观锁版本比对用；O(集合×记录)，演示级数据量可接受） */
+    private Map<String, Object> findRecord(String id) {
+        String coll = findRecordCollection(id);
+        if (coll == null) return null;
+        return lists.get(coll).stream().filter(r -> id.equals(r.get("id"))).findFirst().orElse(null);
+    }
+
+    /** 返回记录 id 所在的数组集合名（B3 乐观锁恢复用）；不在任何集合 → null */
+    private String findRecordCollection(String id) {
+        for (String coll : LIST_COLLS) {
+            for (Map<String, Object> r : lists.get(coll)) {
+                if (id.equals(r.get("id"))) return coll;
+            }
+        }
+        return null;
+    }
+
+    /** B3 乐观锁：版本不匹配时，从 DB 恢复记录为权威态（撤销本次未持久化的内存改动，保持内存与 DB 一致） */
+    private void restoreRecordFromDb(String coll, String id) {
+        try {
+            List<String> payloads = jdbc.queryForList("SELECT payload FROM biz_" + coll + " WHERE id = ?", String.class, id);
+            if (!payloads.isEmpty()) {
+                Map<String, Object> dbRec = om.readValue(payloads.get(0), new TypeReference<Map<String, Object>>() {});
+                List<Map<String, Object>> rows = lists.get(coll);
+                for (int i = 0; i < rows.size(); i++) {
+                    if (id.equals(rows.get(i).get("id"))) {
+                        rows.set(i, dbRec);
+                        return;
+                    }
+                }
+            }
+        } catch (Exception ignore) {
+            // DB 读取失败（记录不在该表等）：保持内存现状
         }
     }
 

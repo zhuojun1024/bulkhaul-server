@@ -1,6 +1,7 @@
 package com.blms.service.dispatch;
 
 import com.blms.common.ApiResult;
+import com.blms.common.OptimisticLockSupport;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -30,38 +31,45 @@ public class DispatchController {
     }
 
     @PostMapping("/{id}/confirmLoad")
-    public ApiResult<Map<String, Object>> confirmLoad(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> confirmLoad(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.confirmLoad(id));
     }
 
     @PostMapping("/{id}/accept")
-    public ApiResult<Map<String, Object>> accept(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> accept(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.acceptDispatch(id));
     }
 
     @PostMapping("/{id}/depart")
-    public ApiResult<Map<String, Object>> depart(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> depart(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.depart(id));
     }
 
     @PostMapping("/{id}/arrive")
-    public ApiResult<Map<String, Object>> arrive(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> arrive(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.arrive(id));
     }
 
     @PostMapping("/{id}/confirmUnload")
-    public ApiResult<Map<String, Object>> confirmUnload(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> confirmUnload(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.confirmUnload(id));
     }
 
     @PostMapping("/{id}/cancel")
-    public ApiResult<Map<String, Object>> cancel(@PathVariable String id, @RequestBody Map<String, String> body) {
-        return ApiResult.success(service.cancelDispatch(id, body.get("reason")));
+    public ApiResult<Map<String, Object>> cancel(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
+        return ApiResult.success(service.cancelDispatch(id, body.get("reason") == null ? null : String.valueOf(body.get("reason"))));
     }
 
     @PostMapping("/{id}/reassign")
-    public ApiResult<Map<String, Object>> reassign(@PathVariable String id, @RequestBody Map<String, String> body) {
-        return ApiResult.success(service.reassignDispatch(id, body.get("vehicleId"), body.get("driverId")));
+    public ApiResult<Map<String, Object>> reassign(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
+        return ApiResult.success(service.reassignDispatch(id, body.get("vehicleId") == null ? null : String.valueOf(body.get("vehicleId")), body.get("driverId") == null ? null : String.valueOf(body.get("driverId"))));
     }
 
     @PostMapping("/{id}/reportException")
@@ -71,7 +79,8 @@ public class DispatchController {
     }
 
     @PostMapping("/{id}/resume")
-    public ApiResult<Map<String, Object>> resume(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> resume(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.resumeDispatch(id));
     }
 

@@ -1,6 +1,7 @@
 package com.blms.service.contract;
 
 import com.blms.common.ApiResult;
+import com.blms.common.OptimisticLockSupport;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -39,7 +40,8 @@ public class ContractController {
     }
 
     @PostMapping("/plan/{id}/cancel")
-    public ApiResult<Map<String, Object>> cancelPlan(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> cancelPlan(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.cancelPlan(id));
     }
 
@@ -62,6 +64,7 @@ public class ContractController {
     // ===== 合同变更（改价审批） =====
     @PostMapping("/contract/{id}/change")
     public ApiResult<Map<String, Object>> change(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
         Map<String, Object> fields = body.get("fields") instanceof Map ? (Map<String, Object>) body.get("fields") : body;
         return ApiResult.success(service.changeContract(id, fields, body.get("reason") == null ? "" : String.valueOf(body.get("reason"))));
     }
@@ -78,23 +81,27 @@ public class ContractController {
 
     // ===== 合同生命周期 =====
     @PostMapping("/contract/{id}/extend")
-    public ApiResult<Map<String, Object>> extend(@PathVariable String id, @RequestBody Map<String, String> body) {
-        return ApiResult.success(service.extendContract(id, body.get("newDate"), body.get("reason")));
+    public ApiResult<Map<String, Object>> extend(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
+        return ApiResult.success(service.extendContract(id, body.get("newDate") == null ? null : String.valueOf(body.get("newDate")), body.get("reason") == null ? null : String.valueOf(body.get("reason"))));
     }
 
     @PostMapping("/contract/{id}/terminate")
     public ApiResult<Map<String, Object>> terminate(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
         boolean settleNow = body.get("settleNow") == null || Boolean.TRUE.equals(body.get("settleNow"));
         return ApiResult.success(service.terminateContract(id, String.valueOf(body.getOrDefault("reason", "")), settleNow));
     }
 
     @PostMapping("/contract/{id}/complete")
-    public ApiResult<Map<String, Object>> complete(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> complete(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.completeContract(id));
     }
 
     @PostMapping("/contract/{id}/archive")
-    public ApiResult<Map<String, Object>> archive(@PathVariable String id) {
+    public ApiResult<Map<String, Object>> archive(@PathVariable String id, @RequestParam(required = false) Integer expectedVersion) {
+        OptimisticLockSupport.expectFromQuery(id, expectedVersion);
         return ApiResult.success(service.archiveContract(id));
     }
 

@@ -1,6 +1,7 @@
 package com.blms.service.weighing;
 
 import com.blms.common.ApiResult;
+import com.blms.common.OptimisticLockSupport;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -21,6 +22,7 @@ public class WeighingController {
 
     @PostMapping("/{id}/correct")
     public ApiResult<Map<String, Object>> correct(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        OptimisticLockSupport.expectFromBody(id, body);
         double newNet = body.get("newNet") == null ? 0 : ((Number) body.get("newNet")).doubleValue();
         String reason = body.get("reason") == null ? "" : String.valueOf(body.get("reason"));
         return ApiResult.success(service.correctWeighing(id, newNet, reason));
