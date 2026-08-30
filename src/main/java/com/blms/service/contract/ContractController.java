@@ -2,6 +2,9 @@ package com.blms.service.contract;
 
 import com.blms.common.ApiResult;
 import com.blms.common.OptimisticLockSupport;
+import com.blms.dto.CreateContractRequest;
+import com.blms.dto.CreatePlanRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -20,8 +23,9 @@ public class ContractController {
     }
 
     @PostMapping("/contract")
-    public ApiResult<Map<String, Object>> createContract(@RequestBody Map<String, Object> body) {
-        return ApiResult.success(service.createContract(body, body.getOrDefault("status", "draft").toString()));
+    public ApiResult<Map<String, Object>> createContract(@Valid @RequestBody CreateContractRequest req) {
+        String status = req.getStatus() == null ? "draft" : req.getStatus();
+        return ApiResult.success(service.createContract(req.toMap(), status));
     }
 
     @GetMapping("/contract/remaining/{id}")
@@ -35,8 +39,8 @@ public class ContractController {
     }
 
     @PostMapping("/plan")
-    public ApiResult<Map<String, Object>> createPlan(@RequestBody Map<String, Object> body) {
-        return ApiResult.success(service.createPlan(body));
+    public ApiResult<Map<String, Object>> createPlan(@Valid @RequestBody CreatePlanRequest req) {
+        return ApiResult.success(service.createPlan(req.toMap()));
     }
 
     @PostMapping("/plan/{id}/cancel")

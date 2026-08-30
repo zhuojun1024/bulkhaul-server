@@ -2,6 +2,8 @@ package com.blms.service.dispatch;
 
 import com.blms.common.ApiResult;
 import com.blms.common.OptimisticLockSupport;
+import com.blms.dto.CreateDispatchesRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,12 +24,8 @@ public class DispatchController {
     }
 
     @PostMapping("/create")
-    public ApiResult<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
-        String planId = String.valueOf(body.get("planId"));
-        int count = body.get("count") == null ? 1 : ((Number) body.get("count")).intValue();
-        @SuppressWarnings("unchecked")
-        List<String> vehicleIds = (List<String>) body.getOrDefault("vehicleIds", List.of());
-        return ApiResult.success(service.createDispatches(planId, count, vehicleIds));
+    public ApiResult<Map<String, Object>> create(@Valid @RequestBody CreateDispatchesRequest req) {
+        return ApiResult.success(service.createDispatches(req.getPlanId(), req.getCount(), req.getVehicleIds() != null ? req.getVehicleIds() : List.of()));
     }
 
     @PostMapping("/{id}/confirmLoad")
