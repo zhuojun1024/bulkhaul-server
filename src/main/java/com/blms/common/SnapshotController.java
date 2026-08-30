@@ -2,6 +2,7 @@ package com.blms.common;
 
 import com.blms.auth.LoginLockoutService;
 import com.blms.service.admin.DataScopeService;
+import com.blms.service.scheduler.SchedulerLeaderService;
 import com.blms.store.DataStore;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,14 +29,17 @@ public class SnapshotController {
     private final DataScopeService scope;
     private final LoginLockoutService lockout;
     private final RateLimitService rateLimit;
+    private final SchedulerLeaderService leader;
 
     public SnapshotController(DataStore store, AuditLog audit, DataScopeService scope,
-                              LoginLockoutService lockout, RateLimitService rateLimit) {
+                              LoginLockoutService lockout, RateLimitService rateLimit,
+                              SchedulerLeaderService leader) {
         this.store = store;
         this.audit = audit;
         this.scope = scope;
         this.lockout = lockout;
         this.rateLimit = rateLimit;
+        this.leader = leader;
     }
 
     @GetMapping("/api/snapshot")
@@ -64,9 +68,10 @@ public class SnapshotController {
         store.resetToSeed();
         lockout.clearAll(); // A2：自恢复——清空防爆破锁定，避免某账号被锁后影响后续场景登录
         rateLimit.clearAll(); // A3：自恢复——清空限流计数，避免某 IP/账号被限后影响后续场景
+        leader.clear(); // C4：自恢复——清空定时任务 leader 租约，避免旧租约残留影响后续接管
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("reset", true);
-        data.put("note", "内存数据仓库已重置回种子态、防爆破锁定与限流计数已清空（仅内存/Redis，不回写 DB）");
+        data.put("note", "内存数据仓库已重置回种子态、防爆破锁定/限流计数/定时任务 leader 租约已清空（仅内存/Redis，不回写 DB）");
         return ApiResult.success(data);
     }
 }

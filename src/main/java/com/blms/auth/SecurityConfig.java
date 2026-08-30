@@ -4,10 +4,12 @@ import com.blms.common.RateLimitFilter;
 import com.blms.common.RateLimitService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,6 +30,10 @@ public class SecurityConfig {
     private final RateLimitService rateLimit;
     private final ObjectMapper om;
 
+    /** D1 OpenAPI/Swagger 公开开关：dev 公开（联调看文档），生产需认证（不暴露 API 面，见 application-prod.yml） */
+    @Value("${blms.openapi.public:true}")
+    private boolean openApiPublic;
+
     public SecurityConfig(JwtAuthFilter jwtAuthFilter, RateLimitService rateLimit, ObjectMapper om) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.rateLimit = rateLimit;
@@ -37,11 +43,18 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
+                // C5：CORS 白名单（预检先于认证；默认拒绝跨域，见 CorsConfig）
+                .cors(Customizer.withDefaults())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/health", "/api/auth/captcha", "/api/auth/login",
-                                "/actuator/health", "/actuator/info").permitAll()
-                        .anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers("/api/health", "/api/auth/captcha", "/api/auth/login",
+                            "/actuator/health", "/actuator/info").permitAll();
+                    // D1 OpenAPI/Swagger：dev 公开（联调看文档），生产需认证（不暴露 API 面）
+                    if (openApiPublic) {
+                        auth.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
+                    }
+                    auth.anyRequest().authenticated();
+                })
                 .exceptionHandling(ex -> ex.authenticationEntryPoint((req, res, e) -> {
                     res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     res.setContentType("application/json;charset=UTF-8");

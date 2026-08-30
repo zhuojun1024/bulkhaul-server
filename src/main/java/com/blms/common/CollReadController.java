@@ -2,6 +2,7 @@ package com.blms.common;
 
 import com.blms.service.admin.DataScopeService;
 import com.blms.store.DataStore;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,6 +38,7 @@ public class CollReadController {
      *  - 带 page → {list, total, page, size}（列表页按页加载，不再拉全量；size 默认 20，上限 200）。
      * 行级数据范围（A1）：区域集合先按当前操作人过滤，total=过滤后行数（分页与行级过滤叠加正确）。
      */
+    @Operation(summary = "集合列表（B2 分页）", description = "不带 page → 全量（向后兼容）；带 page → {list,total,page,size}（size 默认 20 上限 200）。区域集合按当前操作人数据范围过滤（A1）")
     @GetMapping("/{name}")
     public ApiResult<Object> list(@PathVariable String name,
                                   @RequestParam(required = false) Integer page,
@@ -61,6 +63,7 @@ public class CollReadController {
         return ApiResult.success(data);
     }
 
+    @Operation(summary = "集合单条", description = "越权数据范围返回 403 forbidden；不存在返回 404 not-found")
     @GetMapping("/{name}/{id}")
     public ApiResult<Map<String, Object>> one(@PathVariable String name, @PathVariable String id) {
         if (!DataStore.LIST_COLLS.contains(name)) return ApiResult.fail("未知集合: " + name, "not-found");

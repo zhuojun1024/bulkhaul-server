@@ -2,6 +2,7 @@ package com.blms.auth;
 
 import com.blms.common.ApiResult;
 import com.blms.common.AuditLog;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,11 +30,13 @@ public class AuthController {
         this.auth = auth;
     }
 
+    @Operation(summary = "获取图形验证码", description = "返回 { id, code, svg }（code 为验证码明文，联调用；生产前端只展示 svg）")
     @GetMapping("/captcha")
     public ApiResult<CaptchaService.Captcha> captcha() {
         return ApiResult.success(captcha.generate());
     }
 
+    @Operation(summary = "登录", description = "入参 { username, password, captchaId, captchaCode }；成功返回 { token, user }（JWT 480min），失败 { ok:false, error, code }（A2 防爆破：连续失败锁定账号）")
     @PostMapping("/login")
     public ApiResult<Map<String, Object>> login(@RequestBody Map<String, String> body, HttpServletRequest req) {
         AuthService.LoginResult r = auth.login(
@@ -50,6 +53,7 @@ public class AuthController {
         return ApiResult.success(Map.of("token", r.token(), "user", safe));
     }
 
+    @Operation(summary = "当前操作人", description = "JWT 有效时返回当前操作人（含 username/role/regions 数据范围）")
     @GetMapping("/me")
     public ApiResult<Operator> me() {
         Operator op = Operator.current();

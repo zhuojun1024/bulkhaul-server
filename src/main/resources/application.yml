@@ -45,6 +45,14 @@ blms:
     enabled: ${RATE_LIMIT_ENABLED:true}
     login-per-minute: ${RATE_LIMIT_LOGIN_PER_MINUTE:120}
     write-per-minute: ${RATE_LIMIT_WRITE_PER_MINUTE:600}
+  cors:
+    # C5 CORS 白名单（逗号分隔前端域名，支持通配）；**默认空 = 不做 CORS 处理**（同源反代直通，跨域由浏览器同源策略限制）。
+    # 仅当前端与后端不同源（独立域名）部署时，经 CORS_ALLOWED_ORIGINS 注入前端域名 → 启用 CORS 强制（仅白名单来源可跨域）。
+    # 注：反代会转发 Origin 同时改写 Host，后端默认拒绝跨域会误伤同源反代（登录 403），故采用白名单显式启用（opt-in）。
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  openapi:
+    # D1 OpenAPI/Swagger 公开开关：dev 公开（联调看文档 /v3/api-docs + Swagger UI）；生产 false 需认证（不暴露 API 面）。
+    public: ${OPENAPI_PUBLIC:true}
 
 logging:
   level:

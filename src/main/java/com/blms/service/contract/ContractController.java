@@ -4,6 +4,7 @@ import com.blms.common.ApiResult;
 import com.blms.common.OptimisticLockSupport;
 import com.blms.dto.CreateContractRequest;
 import com.blms.dto.CreatePlanRequest;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,6 +23,7 @@ public class ContractController {
         this.service = service;
     }
 
+    @Operation(summary = "新建合同（A5 入参校验）", description = "必填：name/shipperId/consigneeId/commodityId/loadTerminalId/unloadTerminalId/quantity>0/unitPrice>0；非法入参 400 validation_error + data.fieldErrors（字段→错误）")
     @PostMapping("/contract")
     public ApiResult<Map<String, Object>> createContract(@Valid @RequestBody CreateContractRequest req) {
         String status = req.getStatus() == null ? "draft" : req.getStatus();
@@ -38,6 +40,7 @@ public class ContractController {
         return ApiResult.success(service.creditCheck(customerId, orderAmount));
     }
 
+    @Operation(summary = "新建运输计划（A5 入参校验）", description = "必填：contractId/quantity>0；可选 planDate/remark")
     @PostMapping("/plan")
     public ApiResult<Map<String, Object>> createPlan(@Valid @RequestBody CreatePlanRequest req) {
         return ApiResult.success(service.createPlan(req.toMap()));

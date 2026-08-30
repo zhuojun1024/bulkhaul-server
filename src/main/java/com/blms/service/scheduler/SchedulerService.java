@@ -27,15 +27,18 @@ public class SchedulerService {
     private final FlowCtx ctx;
     private final ExceptionService exceptionService;
     private final SettlementService settlementService;
+    private final SchedulerLeaderService leader;
 
     /** 自动轮询开关（验证时置 false，避免后台任务干扰端到端断言；手动 /api/scheduler/tick 不受限） */
     @Value("${blms.scheduler.auto-enabled:true}")
     private boolean autoEnabled;
 
-    public SchedulerService(FlowCtx ctx, ExceptionService exceptionService, SettlementService settlementService) {
+    public SchedulerService(FlowCtx ctx, ExceptionService exceptionService, SettlementService settlementService,
+                            SchedulerLeaderService leader) {
         this.ctx = ctx;
         this.exceptionService = exceptionService;
         this.settlementService = settlementService;
+        this.leader = leader;
     }
 
     /** GPS/遥测推进：在途车次进度与车速（等价 advanceTelemetry） */
@@ -152,6 +155,13 @@ public class SchedulerService {
         if (!autoEnabled) {
             Map<String, Object> skip = new LinkedHashMap<>();
             skip.put("skipped", true);
+            return skip;
+        }
+        // C4：单实例 leader 租约——多实例下仅 leader 执行（非 leader 跳过，避免重复围栏/遥测/升级）；手动 /api/scheduler/tick 走 doTick 不受限
+        if (!leader.tryAcquireOrRenew()) {
+            Map<String, Object> skip = new LinkedHashMap<>();
+            skip.put("skipped", true);
+            skip.put("reason", "not_leader");
             return skip;
         }
         return doTick();

@@ -49,6 +49,13 @@
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
 
+    <!-- D1 OpenAPI/Swagger：springdoc 生成 /v3/api-docs + Swagger UI（机器可读契约，前端可据此生成类型） -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+      <version>2.6.0</version>
+    </dependency>
+
     <!-- C3 可观测性：结构化日志（logback JSON，含 traceId，prod 可被日志平台解析） -->
     <dependency>
       <groupId>net.logstash.logback</groupId>

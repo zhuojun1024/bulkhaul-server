@@ -26,6 +26,14 @@ blms:
     enabled: ${RATE_LIMIT_ENABLED:true}
     login-per-minute: ${RATE_LIMIT_LOGIN_PER_MINUTE:10}
     write-per-minute: ${RATE_LIMIT_WRITE_PER_MINUTE:100}
+  cors:
+    # C5 CORS 白名单（生产）：默认空 = 不做 CORS 处理（Nginx 反代同源部署直通，跨域由浏览器同源策略限制）；
+    # 仅当前端与后端不同源（独立域名）时，经 CORS_ALLOWED_ORIGINS 注入前端域名（如 https://blms.example.com）→ 启用 CORS 强制。
+    # 注：反代会转发 Origin 同时改写 Host，后端默认拒绝跨域会误伤同源反代（登录 403），故采用白名单显式启用（opt-in）。
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  openapi:
+    # D1 OpenAPI/Swagger（生产）：默认 false 需认证（不暴露 API 面）；如需内部文档访问，经 OPENAPI_PUBLIC=true 放开（仍走 JWT 认证）。
+    public: ${OPENAPI_PUBLIC:false}
 
 logging:
   level:
