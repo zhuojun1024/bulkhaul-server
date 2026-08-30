@@ -84,6 +84,19 @@ class FlowIntegrationTest {
                 new UsernamePasswordAuthenticationToken(op, null, Collections.emptyList()));
     }
 
+    /**
+     * 测试幂等性：把内存数据仓库重置回种子基线（seed_* 快照，不受上次运行 commitAll 污染影响）。
+     * 等价前端 verify-ui.mjs 的 resetDemo()——历史教训：上次运行回写 biz_* 的测试工件（如 YH-TEST-S2）
+     * 会让本次加载到污染态 → 内存重复 ID → commitAll 主键冲突 → 连锁 NPE。重置后跑完 commitAll 再回写干净态。
+     */
+    @BeforeAll
+    void resetToSeed() {
+        store.resetToSeed();
+        pass = 0;
+        fail = 0;
+        failures.clear();
+    }
+
     @BeforeEach
     void setup() { login("张建国", "admin", "平台管理员", ""); }
 
@@ -619,10 +632,13 @@ class FlowIntegrationTest {
     @Test @Order(8)
     void s8_P0回归() {
         // 状态机守卫：非法流转被拦截且状态不变
+        Map<String, Object> dbgA = dispatchService.confirmLoad(str(d2, "id"));
+        Map<String, Object> dbgB = dispatchService.depart(str(d2, "id"));
         check("守卫：在途车次不可确认装货/重复发车",
-                dispatchService.confirmLoad(str(d2, "id")).get("error") != null
-                        && dispatchService.depart(str(d2, "id")).get("error") != null
-                        && "intransit".equals(d2.get("status")));
+                dbgA.get("error") != null
+                        && dbgB.get("error") != null
+                        && "intransit".equals(d2.get("status")),
+                "confirmLoad=" + dbgA + " depart=" + dbgB + " d2.status=" + d2.get("status") + " d2id=" + str(d2, "id"));
         Map<String, Object> excD = store.list("dispatches").stream().filter(x -> "exception".equals(x.get("status"))).findFirst().orElse(null);
         check("守卫：异常车次不可发车/确认卸货", excD == null || (
                 dispatchService.depart(str(excD, "id")).get("error") != null
@@ -829,10 +845,17 @@ class FlowIntegrationTest {
                                 && Math.abs(FlowCtx.num(s13.get("totalAmount")) - (totalBefore - 8000)) < 1e-9
                                 && adjustments != null && !adjustments.isEmpty()
                                 && Math.abs(FlowCtx.num(adjustments.get(adjustments.size() - 1).get("amount")) + 8000) < 1e-9
-                                && str(s13, "id").equals(str(e13, "settleApplied")));
+                                && str(s13, "id").equals(str(e13, "settleApplied")),
+                        "lossBefore=" + lossBefore + " exceptionLoss=" + s13.get("exceptionLoss")
+                                + " totalBefore=" + totalBefore + " totalAmount=" + s13.get("totalAmount")
+                                + " adjustments=" + adjustments + " e13.settleApplied=" + e13.get("settleApplied")
+                                + " s13id=" + str(s13, "id") + " e13id=" + str(e13, "id")
+                                + " d13.settlementId=" + d13.get("settlementId") + " e13.status=" + e13.get("status") + " e13.cost=" + e13.get("cost"));
+                Map<String, Object> dbgRecalc = settlementService.recalcSettlement(str(s13, "id"));
                 check("重算与补扣结果一致（幂等，不重复扣减）",
-                        Math.abs(FlowCtx.num(settlementService.recalcSettlement(str(s13, "id")).get("delta"))) < 1e-9
-                                && Math.abs(FlowCtx.num(s13.get("totalAmount")) - (totalBefore - 8000)) < 1e-9);
+                        Math.abs(FlowCtx.num(dbgRecalc.get("delta"))) < 1e-9
+                                && Math.abs(FlowCtx.num(s13.get("totalAmount")) - (totalBefore - 8000)) < 1e-9,
+                        "recalc=" + dbgRecalc + " totalAmount=" + s13.get("totalAmount") + " expect=" + (totalBefore - 8000));
                 settlementService.startReconcile(str(s13, "id"));
                 check("守卫：非待对账账单不可重算",
                         settlementService.recalcSettlement(str(s13, "id")).get("error") != null);
@@ -883,7 +906,8 @@ class FlowIntegrationTest {
             check("装/卸货码确定性派生（同单同码、异单异码、格式 ZD/XD+6 位）",
                     lc.matches("ZD\\d{6}") && uc.matches("XD\\d{6}")
                             && dispatchService.loadCodeOf(scanD).equals(lc)
-                            && store.list("dispatches").stream().anyMatch(x -> !scanId.equals(str(x, "id")) && !dispatchService.loadCodeOf(x).equals(lc)));
+                            && store.list("dispatches").stream().anyMatch(x -> !scanId.equals(str(x, "id")) && !dispatchService.loadCodeOf(x).equals(lc)),
+                    "lc=" + lc + " uc=" + uc + " scanId=" + scanId);
             check("守卫：错误装货码拦截（状态不变）",
                     dispatchService.scanConfirmLoad(str(scanD, "id"), "ZD999999").get("error") != null && "pending".equals(scanD.get("status")));
             Map<String, Object> rScan = dispatchService.scanConfirmLoad(str(scanD, "id"), lc);

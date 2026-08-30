@@ -17,10 +17,13 @@ public class DispatchService {
 
     private final FlowCtx ctx;
     private final com.blms.service.settlement.SettlementService settlementService;
+    private final com.blms.service.exception.ExceptionService exceptionService;
 
-    public DispatchService(FlowCtx ctx, com.blms.service.settlement.SettlementService settlementService) {
+    public DispatchService(FlowCtx ctx, com.blms.service.settlement.SettlementService settlementService,
+                           com.blms.service.exception.ExceptionService exceptionService) {
         this.ctx = ctx;
         this.settlementService = settlementService;
+        this.exceptionService = exceptionService;
     }
 
     /** 只读：取调度单（供 controller 读取码等） */
@@ -100,7 +103,8 @@ public class DispatchService {
                 double qty = qtyOf(i, effCount, per, p);
                 pending.add(buildDispatch(id, p, qty, v.get("id"), dr.get("id"), "多式联运".equals(p.get("mode")) ? ctx.unitNoOf("多式联运", id) : "", routeDist));
             }
-            for (int i = pending.size() - 1; i >= 0; i--) dispatches.add(0, pending.get(i));
+            // 提交：统一落库（保持"最新在前"顺序，与前端 db.dispatches.unshift 一致）
+            for (Map<String, Object> d : pending) dispatches.add(0, d);
             created.addAll(pending);
         } else {
             for (int i = 0; i < effCount; i++) {
@@ -309,55 +313,13 @@ public class DispatchService {
         return Map.of("ok", true);
     }
 
-    /** 上报异常（等价 reportException → createException） */
+    /** 上报异常（等价 reportException → createException）：RBAC 单点校验 exception，
+     *  复用 ExceptionService.createException 内部核心（事故类同步生成事故记录），返回异常单（守卫拦截时返回带 error 的 Map） */
     public Map<String, Object> reportException(String dispatchId, String description, String type, String level) {
         ctx.requireAction("exception");
         Map<String, Object> d = ctx.dispatchOf(dispatchId);
         if (d == null) return Map.of("error", "调度单不存在");
-        if (!List.of("pending", "loading", "intransit", "unloading").contains(d.get("status"))) {
-            return Map.of("error", "调度单 " + d.get("id") + " 当前非执行中状态，无法上报异常");
-        }
-        d.put("exceptionFrom", d.get("status"));
-        d.put("status", "exception");
-        d.put("speed", 0);
-        List<Map<String, Object>> exceptions = ctx.store().list("exceptions");
-        Map<String, Object> e = new LinkedHashMap<>();
-        e.put("id", ctx.genId("YC-", 4, exceptions));
-        e.put("dispatchId", d.get("id"));
-        e.put("type", type);
-        e.put("level", level);
-        e.put("status", "pending");
-        e.put("occurTime", ctx.now());
-        e.put("handler", "");
-        e.put("description", description);
-        e.put("result", "");
-        e.put("cost", 0);
-        e.put("source", "");
-        exceptions.add(0, e);
-        if ("accident".equals(type)) {
-            Map<String, Object> v = ctx.vehicleOf(str(d, "vehicleId"));
-            List<Map<String, Object>> accidents = ctx.store().list("accidents");
-            Map<String, Object> a = new LinkedHashMap<>();
-            a.put("id", ctx.genId("SG-", 3, accidents));
-            a.put("time", ctx.today());
-            a.put("type", "碰撞");
-            a.put("level", "high".equals(level) ? "重大" : "medium".equals(level) ? "较大" : "一般");
-            a.put("vehicleId", d.get("vehicleId"));
-            a.put("plate", v != null ? v.get("plate") : "-");
-            a.put("location", "调度单 " + d.get("id") + " 在途");
-            a.put("description", description);
-            a.put("handling", "处置中");
-            a.put("loss", 0);
-            a.put("status", "handling");
-            a.put("exceptionId", e.get("id"));
-            accidents.add(0, a);
-            e.put("accidentId", a.get("id"));
-        }
-        ctx.rollupPlan(str(d, "planId"));
-        ctx.logAction("异常处理", "上报异常", "调度单 " + d.get("id") + " 上报异常（" + type + "），生成异常单 " + e.get("id") + ("accident".equals(type) ? " 及事故记录 " + e.get("accidentId") : ""), "success");
-        ctx.notify("调度单 " + d.get("id") + " 上报异常", "exception", "/exception", description, ctx.toRoles("exception"));
-        commit();
-        return Map.of("ok", true, "exception", e);
+        return exceptionService.createException(d, description, type, level, "");
     }
 
     /** 恢复运输（等价 resumeDispatch） */
@@ -529,9 +491,11 @@ public class DispatchService {
         return "XD" + (100000 + (hashStr(str(d, "id") + ":unload") % 900000));
     }
 
-    private static int hashStr(String s) {
-        int n = 0;
-        for (char ch : String.valueOf(s).toCharArray()) n = (n * 31 + (int) ch) % 2147483647;
+    /** 确定性哈希（逐行翻译自前端 hashStr：JS number 为 64 位 double，n*31 不溢出；
+     *  Java 必须用 long 复现，int 会溢出回绕产生负值 → 码值 <100000 或负数，格式/确定性破坏） */
+    private static long hashStr(String s) {
+        long n = 0;
+        for (char ch : String.valueOf(s).toCharArray()) n = (n * 31 + (int) ch) % 2147483647L;
         return n;
     }
 
