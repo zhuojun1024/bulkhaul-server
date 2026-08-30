@@ -1,5 +1,7 @@
 package com.blms.auth;
 
+import com.blms.common.RateLimitFilter;
+import com.blms.common.RateLimitService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -23,10 +25,12 @@ import java.nio.charset.StandardCharsets;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final RateLimitService rateLimit;
     private final ObjectMapper om;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, ObjectMapper om) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RateLimitService rateLimit, ObjectMapper om) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.rateLimit = rateLimit;
         this.om = om;
     }
 
@@ -43,7 +47,9 @@ public class SecurityConfig {
                     res.getWriter().write(om.writeValueAsString(java.util.Map.of(
                             "ok", false, "error", "未登录或登录已过期", "code", "unauthenticated")));
                 }))
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                // A3 全局限流：在 JWT 认证之后（写档可按用户限流），未认证按 IP 兜底
+                .addFilterAfter(new RateLimitFilter(rateLimit, om), JwtAuthFilter.class);
         return http.build();
     }
 

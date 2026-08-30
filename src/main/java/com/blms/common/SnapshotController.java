@@ -27,12 +27,15 @@ public class SnapshotController {
     private final AuditLog audit;
     private final DataScopeService scope;
     private final LoginLockoutService lockout;
+    private final RateLimitService rateLimit;
 
-    public SnapshotController(DataStore store, AuditLog audit, DataScopeService scope, LoginLockoutService lockout) {
+    public SnapshotController(DataStore store, AuditLog audit, DataScopeService scope,
+                              LoginLockoutService lockout, RateLimitService rateLimit) {
         this.store = store;
         this.audit = audit;
         this.scope = scope;
         this.lockout = lockout;
+        this.rateLimit = rateLimit;
     }
 
     @GetMapping("/api/snapshot")
@@ -60,9 +63,10 @@ public class SnapshotController {
     public ApiResult<Map<String, Object>> resetDemo() {
         store.resetToSeed();
         lockout.clearAll(); // A2：自恢复——清空防爆破锁定，避免某账号被锁后影响后续场景登录
+        rateLimit.clearAll(); // A3：自恢复——清空限流计数，避免某 IP/账号被限后影响后续场景
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("reset", true);
-        data.put("note", "内存数据仓库已重置回种子态、防爆破锁定已清空（仅内存/Redis，不回写 DB）");
+        data.put("note", "内存数据仓库已重置回种子态、防爆破锁定与限流计数已清空（仅内存/Redis，不回写 DB）");
         return ApiResult.success(data);
     }
 }

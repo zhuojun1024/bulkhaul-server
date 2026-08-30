@@ -20,6 +20,12 @@ blms:
     ttl-minutes: ${JWT_TTL_MINUTES:480}
   scheduler:
     auto-enabled: ${SCHEDULER_AUTO_ENABLED:true}
+  rate-limit:
+    # A3 全局限流（生产严格）：登录/验证码 10/min/IP（防刷登录/验证码）；写端点 100/min/用户（防单账号高频写）。
+    # 超限 429 + Retry-After；Redis 不可用 fail-open（不阻断业务）。
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    login-per-minute: ${RATE_LIMIT_LOGIN_PER_MINUTE:10}
+    write-per-minute: ${RATE_LIMIT_WRITE_PER_MINUTE:100}
 
 logging:
   level:

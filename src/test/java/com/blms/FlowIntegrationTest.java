@@ -8,6 +8,7 @@ import com.blms.common.AuditLog;
 import com.blms.common.CollReadController;
 import com.blms.common.OptimisticLockContext;
 import com.blms.common.OptimisticLockException;
+import com.blms.common.RateLimitService;
 import com.blms.common.SnapshotController;
 import com.blms.service.admin.DataScopeService;
 import com.blms.service.admin.UserAdminService;
@@ -73,6 +74,7 @@ class FlowIntegrationTest {
     @Autowired CollReadController collRead;
     @Autowired SnapshotController snapshotController;
     @Autowired LoginLockoutService lockout;
+    @Autowired RateLimitService rateLimit;
 
     int pass = 0, fail = 0;
     final List<String> failures = new ArrayList<>();
@@ -1243,6 +1245,27 @@ class FlowIntegrationTest {
         int vC = afterC.get("version") instanceof Number cc ? cc.intValue() : 1;
         check("B3：恢复后基于新版本可继续提交（version → v0+2）",
                 "B3-会话C".equals(str(afterC, "remark")) && vC == v0 + 2);
+    }
+
+    // ===================== A3：全局限流（Redis 固定窗口，超限 429 + Retry-After） =====================
+    @Test @Order(14)
+    void a3_rateLimit() {
+        String dim = "ip:10.9.9.9"; // 测试专用 IP（与真实请求隔离，不污染运行中后端的限流计数）
+        rateLimit.clearAll();
+        check("A3：未超限 → 放行（null）", rateLimit.tryAcquire(RateLimitService.TIER_LOGIN, dim) == null);
+        // 连发到超限 → 返回 Retry-After（1..60 秒）
+        Long retryAfter = null;
+        for (int i = 0; i < 500 && retryAfter == null; i++) {
+            retryAfter = rateLimit.tryAcquire(RateLimitService.TIER_LOGIN, dim);
+        }
+        check("A3：超限 → 返回 Retry-After（1..60 秒）", retryAfter != null && retryAfter >= 1 && retryAfter <= 60);
+        // 不同维度独立（其他 IP 不受影响）
+        check("A3：不同维度独立（其他 IP 不受影响）", rateLimit.tryAcquire(RateLimitService.TIER_LOGIN, "ip:10.9.9.8") == null);
+        // 写档独立于登录档
+        check("A3：写档独立（未超限放行）", rateLimit.tryAcquire(RateLimitService.TIER_WRITE, "user:a3-test") == null);
+        // clearAll 自恢复（reset-demo 调用后重新放行）
+        rateLimit.clearAll();
+        check("A3：clearAll 自恢复（清空后重新放行）", rateLimit.tryAcquire(RateLimitService.TIER_LOGIN, dim) == null);
     }
 
     @AfterAll

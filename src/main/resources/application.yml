@@ -38,6 +38,13 @@ blms:
     # 自动轮询开关；默认关闭（验证/演示环境确定性运行，前端联调时前端自己轮询 /api/scheduler/tick）。
     # 生产开启服务端定时（C4）：--blms.scheduler.auto-enabled=true 或 env SCHEDULER_AUTO_ENABLED=true
     auto-enabled: ${SCHEDULER_AUTO_ENABLED:false}
+  rate-limit:
+    # A3 全局限流（Redis 固定窗口，60s）：dev 宽松（联调/演示/verify-ui 高频登录不触发），生产严格（见 application-prod.yml）。
+    # 登录/验证码按 IP（RATE_LIMIT_LOGIN_PER_MINUTE）；写端点按用户（RATE_LIMIT_WRITE_PER_MINUTE）；GET 不限。
+    # 0=该档关闭；enabled=false 全关（应急）。
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    login-per-minute: ${RATE_LIMIT_LOGIN_PER_MINUTE:120}
+    write-per-minute: ${RATE_LIMIT_WRITE_PER_MINUTE:600}
 
 logging:
   level:
