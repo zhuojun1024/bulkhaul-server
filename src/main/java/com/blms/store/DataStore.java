@@ -168,12 +168,15 @@ public class DataStore {
             for (String coll : LIST_COLLS) {
                 List<Map<String, Object>> rows = lists.get(coll);
                 jdbc.update("DELETE FROM biz_" + coll);
-                if (rows.isEmpty()) continue;
-                List<Object[]> batchArgs = new ArrayList<>();
-                for (Map<String, Object> r : rows) {
-                    batchArgs.add(new Object[]{ String.valueOf(r.get("id")), om.writeValueAsString(r) });
+                if (!rows.isEmpty()) {
+                    List<Object[]> batchArgs = new ArrayList<>();
+                    for (Map<String, Object> r : rows) {
+                        batchArgs.add(new Object[]{ String.valueOf(r.get("id")), om.writeValueAsString(r) });
+                    }
+                    jdbc.batchUpdate("INSERT INTO biz_" + coll + " (id, payload) VALUES (?, ?)", batchArgs);
                 }
-                jdbc.batchUpdate("INSERT INTO biz_" + coll + " (id, payload) VALUES (?, ?)", batchArgs);
+                // B1 路 B：核心表派生列（version/region/status/外键）随 payload 同步，供 A1 行级过滤 / B2 分页 / B3 乐观锁走 SQL
+                syncDerivedColumns(coll);
             }
             for (String coll : OBJ_COLLS) {
                 jdbc.update("DELETE FROM biz_" + coll);
@@ -184,6 +187,74 @@ public class DataStore {
             throw new RuntimeException("回写数据仓库失败", e);
         } finally {
             writeLock.unlock();
+        }
+    }
+
+    /**
+     * B1 路 B：核心表派生列同步（从 payload 回填 version/region/status/关键外键）。
+     * 非核心集合 no-op。region 为派生列（装货侧终端所在数据区域），经终端/合同/调度单 JOIN 回填；
+     * 无匹配（外键空/终端缺失）时保持 NULL（= 无区域 → 数据范围可见，与 DataScopeService 防御语义一致）。
+     * 调用前提：被引用集合（terminals/contracts/dispatches/settlements）已在本次 commitAll 中先回写（LIST_COLLS 顺序保证）。
+     */
+    private void syncDerivedColumns(String coll) {
+        switch (coll) {
+            case "dispatches":
+                jdbc.update("UPDATE biz_dispatches SET version=COALESCE(JSON_EXTRACT(payload,'$.version'),1), "
+                        + "status=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status')), "
+                        + "contract_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.contractId')), "
+                        + "load_terminal_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.loadTerminalId'))");
+                jdbc.update("UPDATE biz_dispatches d JOIN biz_terminals t ON t.id=d.load_terminal_id "
+                        + "SET d.region=JSON_UNQUOTE(JSON_EXTRACT(t.payload,'$.region'))");
+                break;
+            case "contracts":
+                jdbc.update("UPDATE biz_contracts SET version=COALESCE(JSON_EXTRACT(payload,'$.version'),1), "
+                        + "status=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status')), "
+                        + "load_terminal_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.loadTerminalId'))");
+                jdbc.update("UPDATE biz_contracts c JOIN biz_terminals t ON t.id=c.load_terminal_id "
+                        + "SET c.region=JSON_UNQUOTE(JSON_EXTRACT(t.payload,'$.region'))");
+                break;
+            case "plans":
+                jdbc.update("UPDATE biz_plans SET version=COALESCE(JSON_EXTRACT(payload,'$.version'),1), "
+                        + "status=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status')), "
+                        + "contract_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.contractId')), "
+                        + "load_terminal_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.loadTerminalId'))");
+                jdbc.update("UPDATE biz_plans p JOIN biz_terminals t ON t.id=p.load_terminal_id "
+                        + "SET p.region=JSON_UNQUOTE(JSON_EXTRACT(t.payload,'$.region'))");
+                break;
+            case "transportRequests":
+                jdbc.update("UPDATE biz_transportRequests SET version=COALESCE(JSON_EXTRACT(payload,'$.version'),1), "
+                        + "status=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status')), "
+                        + "contract_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.contractId')), "
+                        + "load_terminal_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.loadTerminalId'))");
+                jdbc.update("UPDATE biz_transportRequests r JOIN biz_terminals t ON t.id=r.load_terminal_id "
+                        + "SET r.region=JSON_UNQUOTE(JSON_EXTRACT(t.payload,'$.region'))");
+                break;
+            case "settlements":
+                jdbc.update("UPDATE biz_settlements SET version=COALESCE(JSON_EXTRACT(payload,'$.version'),1), "
+                        + "status=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status')), "
+                        + "contract_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.contractId'))");
+                jdbc.update("UPDATE biz_settlements s JOIN biz_contracts c ON c.id=s.contract_id "
+                        + "JOIN biz_terminals t ON t.id=c.load_terminal_id "
+                        + "SET s.region=JSON_UNQUOTE(JSON_EXTRACT(t.payload,'$.region'))");
+                break;
+            case "weighings":
+                jdbc.update("UPDATE biz_weighings SET version=COALESCE(JSON_EXTRACT(payload,'$.version'),1), "
+                        + "dispatch_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.dispatchId'))");
+                jdbc.update("UPDATE biz_weighings w JOIN biz_dispatches d ON d.id=w.dispatch_id "
+                        + "JOIN biz_terminals t ON t.id=d.load_terminal_id "
+                        + "SET w.region=JSON_UNQUOTE(JSON_EXTRACT(t.payload,'$.region'))");
+                break;
+            case "invoices":
+                jdbc.update("UPDATE biz_invoices SET version=COALESCE(JSON_EXTRACT(payload,'$.version'),1), "
+                        + "status=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status')), "
+                        + "settlement_id=JSON_UNQUOTE(JSON_EXTRACT(payload,'$.settlementId'))");
+                jdbc.update("UPDATE biz_invoices i JOIN biz_settlements s ON s.id=i.settlement_id "
+                        + "JOIN biz_contracts c ON c.id=s.contract_id "
+                        + "JOIN biz_terminals t ON t.id=c.load_terminal_id "
+                        + "SET i.region=JSON_UNQUOTE(JSON_EXTRACT(t.payload,'$.region'))");
+                break;
+            default:
+                // 非核心集合：无派生列，no-op
         }
     }
 
