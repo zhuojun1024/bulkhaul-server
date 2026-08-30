@@ -110,6 +110,7 @@ public class DispatchController {
     @GetMapping("/{id}/codes")
     public ApiResult<Map<String, String>> codes(@PathVariable String id) {
         Map<String, Object> d = service.dispatchOf(id);
+        if (d == null) return ApiResult.fail("调度单不存在", "not-found");
         return ApiResult.success(Map.of("load", service.loadCodeOf(d), "unload", service.unloadCodeOf(d)));
     }
 

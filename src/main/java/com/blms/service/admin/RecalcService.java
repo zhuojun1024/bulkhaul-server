@@ -24,6 +24,10 @@ public class RecalcService {
     }
 
     public Map<String, Object> recalcAll() {
+        // RBAC 单点校验：全局口径校准会改写调度/车辆/司机/计划/合同/结算并 commitAll，
+        // 属全局数据变更，仅平台管理员（actions=null 全放行）可触发；其余角色默认拒绝。
+        // 前端启动时 recalcAll() 为内存本地校准（afterWrite 后台 POST 被拒仅 console.warn，不阻塞 UI）。
+        ctx.requireAction("admin");
         List<Map<String, Object>> dispatches = ctx.store().list("dispatches");
         // 多式联运口径：补运输方式；非公路按运输单元执行，不绑车辆/司机
         for (Map<String, Object> d : dispatches) {
