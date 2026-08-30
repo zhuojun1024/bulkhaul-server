@@ -49,3 +49,13 @@ blms:
 logging:
   level:
     com.blms: ${LOG_LEVEL_COM_BLMS:info}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # C3 可观测性：暴露 /actuator/health（探活，公开）/ /actuator/info / /actuator/metrics（已认证可抓取）
+        include: health,info,metrics
+  metrics:
+    tags:
+      application: bulkhaul-server
