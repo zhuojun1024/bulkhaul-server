@@ -1,8 +1,9 @@
 spring:
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/blms_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: blms
-    password: blms123456
+    # CI（GitHub Actions）经环境变量指向 service 容器；本地默认值不变（127.0.0.1:3306/blms_test）
+    url: ${TEST_DB_URL:jdbc:mysql://127.0.0.1:3306/blms_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${TEST_DB_USERNAME:blms}
+    password: ${TEST_DB_PASSWORD:blms123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     enabled: true
