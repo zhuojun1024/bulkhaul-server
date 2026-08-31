@@ -8,6 +8,7 @@ import com.blms.common.AuditLog;
 import com.blms.common.CollReadController;
 import com.blms.common.OptimisticLockContext;
 import com.blms.common.OptimisticLockException;
+import com.blms.common.ForbiddenException;
 import com.blms.common.RateLimitService;
 import com.blms.common.SnapshotController;
 import com.blms.service.admin.DataScopeService;
@@ -28,6 +29,7 @@ import com.blms.store.FlowCtx;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
@@ -75,6 +77,7 @@ class FlowIntegrationTest {
     @Autowired SnapshotController snapshotController;
     @Autowired LoginLockoutService lockout;
     @Autowired RateLimitService rateLimit;
+    @Autowired JdbcTemplate jdbc;
 
     int pass = 0, fail = 0;
     final List<String> failures = new ArrayList<>();
@@ -1204,6 +1207,53 @@ class FlowIntegrationTest {
         LoginLockoutService.LockResult r7 = lockout.recordFailure("CASE-TEST");
         check("A2：账号维度归一（大小写/空白不绕过）", r7.remaining() == 2);
         lockout.clear("case-test");
+    }
+
+    /* ===================== Phase 4 决策 2：重置演示数据持久化（reset-demo 限管理员 + 回写 biz_*） =====================
+     * 自包含：制造脏数据 → 验证已持久化 → 非管理员 403 → 管理员重置 → 验证脏数据从 biz_* 移除（持久化，非仅内存）。
+     * 放最后（Order 92）：resetDemo 会重置内存态并 commitAll 回写 DB，须在所有读种子态的环节之后执行。 */
+    @Test
+    @Order(92)
+    void phase4_resetDemo_persist() {
+        // 前置：取一条种子调度单 id（seed_dispatches，确保重置后仍在种子态），制造脏数据并 commitAll 持久化到 biz_dispatches
+        login("张建国", "admin", "平台管理员", "");
+        String seedId = jdbc.queryForObject("SELECT id FROM seed_dispatches LIMIT 1", String.class);
+        Map<String, Object> d = byId("dispatches", seedId);
+        check("P4：种子调度单在内存态存在（前置）", d != null);
+        d.put("status", "PHASE4DIRTY");
+        store.commitAll();
+        Integer dirtyBefore = jdbc.queryForObject(
+                "SELECT count(*) FROM biz_dispatches WHERE JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status'))='PHASE4DIRTY'", Integer.class);
+        check("P4：脏数据已持久化到 biz_dispatches（前置）", dirtyBefore != null && dirtyBefore >= 1);
+
+        // 非管理员（调度员 user02）重置 → 403 forbidden（RBAC 单点校验）
+        login("李芳", "user02", "调度员", "");
+        boolean forbidden = false;
+        try { snapshotController.resetDemo(); } catch (ForbiddenException e) { forbidden = true; }
+        check("P4：非管理员（调度员）重置被拒（403 forbidden）", forbidden);
+        // 非管理员重置不应改动数据（脏数据仍在）
+        Integer dirtyAfterDenied = jdbc.queryForObject(
+                "SELECT count(*) FROM biz_dispatches WHERE JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status'))='PHASE4DIRTY'", Integer.class);
+        check("P4：非管理员被拒后脏数据未变（仍持久化）", dirtyAfterDenied != null && dirtyAfterDenied >= 1);
+
+        // 平台管理员重置 → 200 + reset=true + note 含 leader（C4 自恢复兼容）
+        login("张建国", "admin", "平台管理员", "");
+        ApiResult<Map<String, Object>> r = snapshotController.resetDemo();
+        check("P4：管理员重置成功（reset=true）", r.isOk() && Boolean.TRUE.equals(r.getData().get("reset")));
+        check("P4：重置 note 提及 leader 租约自恢复（C4 兼容）", r.getData().get("note") != null
+                && String.valueOf(r.getData().get("note")).contains("leader"));
+
+        // 核心断言：脏数据已从 biz_dispatches 移除（重置持久化回写 DB，非仅内存——薄客户端化后重启不复活脏数据）
+        Integer dirtyAfter = jdbc.queryForObject(
+                "SELECT count(*) FROM biz_dispatches WHERE JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status'))='PHASE4DIRTY'", Integer.class);
+        check("P4：重置后脏数据已从 biz_dispatches 移除（持久化回写 DB）", dirtyAfter != null && dirtyAfter == 0);
+        // 内存态也恢复种子（种子调度单状态非脏值；且无任何调度单残留脏状态）
+        Map<String, Object> dAfter = byId("dispatches", seedId);
+        check("P4：重置后种子调度单内存态恢复（状态非脏值）", dAfter != null && !"PHASE4DIRTY".equals(str(dAfter, "status")));
+        check("P4：重置后内存态无残留脏状态", store.list("dispatches").stream().noneMatch(x -> "PHASE4DIRTY".equals(str(x, "status"))));
+        // 审计：重置写入 op_log（module=系统 action=reset-demo）
+        boolean audited = audit.recent(50).stream().anyMatch(l -> "reset-demo".equals(l.get("action")));
+        check("P4：重置写入审计日志（action=reset-demo）", audited);
     }
 
     // ===================== B3：乐观锁（version 不匹配 → 409 + 无静默覆盖 + 恢复权威态） =====================

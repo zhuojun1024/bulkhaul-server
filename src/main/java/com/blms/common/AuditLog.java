@@ -4,6 +4,7 @@ import com.blms.auth.Operator;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -29,20 +30,42 @@ public class AuditLog {
 
     public AuditLog(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+        resyncSeq(); // 启动时取库内 op_log 最大值初始化 seq
+    }
+
+    /**
+     * 从库内 op_log 最大值重同步 seq（只升不降）。
+     * 多 Spring 上下文（各持一个 AuditLog bean）共享 op_log 时，先建上下文的 bean seq 可能落后于库内最大值
+     * → incrementAndGet 生成的 id 与后建上下文已写入的行主键冲突（DuplicateKeyException）。
+     * 冲突时调用本方法对齐到最新，再重试（见 log 的重试循环），使审计 ID 生成与上下文创建顺序无关。
+     */
+    private void resyncSeq() {
         Integer max = jdbc.queryForObject(
                 "SELECT COALESCE(MAX(CAST(SUBSTRING(id, 5) AS UNSIGNED)), 0) FROM op_log", Integer.class);
-        this.seq.set(max == null ? 0 : max);
+        if (max != null && max > seq.get()) seq.set(max);
     }
 
     /** 写审计日志；operator 为 null 时按"未登录"记录（默认拒绝语义下不应出现写成功，但失败日志可能来自匿名态） */
     public void log(String module, String action, String detail, String result, Operator operator, String ip) {
-        String id = "LOG-" + String.format("%05d", seq.incrementAndGet());
         String user = operator != null ? operator.getName() : "未登录";
         String username = operator != null ? operator.getUsername() : "";
-        jdbc.update(
-                "INSERT INTO op_log (id, time, user, username, action, module, detail, ip, result) VALUES (?,?,?,?,?,?,?,?,?)",
-                id, LocalDateTime.now().format(FMT), user, username, action, module,
-                detail == null ? "" : detail, ip == null ? "" : ip, result);
+        String time = LocalDateTime.now().format(FMT);
+        // ID 生成：内存自增；多 Spring 上下文共享 op_log 时 seq 可能落后 → 主键冲突，
+        // 冲突时从库内最大值重同步并重试（有界），与上下文创建顺序无关。
+        int retries = 0;
+        while (true) {
+            String id = "LOG-" + String.format("%05d", seq.incrementAndGet());
+            try {
+                jdbc.update(
+                        "INSERT INTO op_log (id, time, user, username, action, module, detail, ip, result) VALUES (?,?,?,?,?,?,?,?,?)",
+                        id, time, user, username, action, module,
+                        detail == null ? "" : detail, ip == null ? "" : ip, result);
+                break;
+            } catch (DuplicateKeyException e) {
+                if (++retries > 5) throw e; // 有界重试：避免极端并发下死循环
+                resyncSeq();
+            }
+        }
         // 与前端一致：超上限裁剪最旧
         jdbc.update("DELETE FROM op_log WHERE id NOT IN (SELECT id FROM (SELECT id FROM op_log ORDER BY time DESC, id DESC LIMIT " + MAX_LOGS + ") t)");
         log.debug("audit: [{}] {} {} result={}", username, module, action, result);

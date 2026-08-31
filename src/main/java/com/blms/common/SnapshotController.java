@@ -4,6 +4,7 @@ import com.blms.auth.LoginLockoutService;
 import com.blms.service.admin.DataScopeService;
 import com.blms.service.scheduler.SchedulerLeaderService;
 import com.blms.store.DataStore;
+import com.blms.store.FlowCtx;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,16 +31,18 @@ public class SnapshotController {
     private final LoginLockoutService lockout;
     private final RateLimitService rateLimit;
     private final SchedulerLeaderService leader;
+    private final FlowCtx ctx;
 
     public SnapshotController(DataStore store, AuditLog audit, DataScopeService scope,
                               LoginLockoutService lockout, RateLimitService rateLimit,
-                              SchedulerLeaderService leader) {
+                              SchedulerLeaderService leader, FlowCtx ctx) {
         this.store = store;
         this.audit = audit;
         this.scope = scope;
         this.lockout = lockout;
         this.rateLimit = rateLimit;
         this.leader = leader;
+        this.ctx = ctx;
     }
 
     @GetMapping("/api/snapshot")
@@ -62,16 +65,27 @@ public class SnapshotController {
         return ApiResult.success(audit.recent(1000));
     }
 
-    /** 重置演示数据：把内存数据仓库重置回启动时的种子态（等价前端旧架构 resetDb，供测试/演示跨场景恢复种子前置数据） */
+    /**
+     * 重置演示数据（Phase 4 决策 2：持久化恢复演示数据版本）：
+     *   1. RBAC 单点校验：仅平台管理员（actions=null 全放行）可触发，其余角色 403（前端按钮权限仅体验层）。
+     *   2. 内存数据仓库重置回种子态（seed_* 只读快照基线，不受 commitAll 污染）。
+     *   3. commitAll() 把种子态回写 biz_*（薄客户端化后 DB 为权威——只重置内存则重启后脏数据复活；
+     *      回写后重启仍为种子态，演示数据版本持久化）。
+     *   4. 自恢复：清空防爆破锁定（A2）/限流计数（A3）/定时任务 leader 租约（C4），避免残留影响后续场景。
+     * 供测试/演示跨场景恢复种子前置数据（等价前端旧架构 resetDb）。
+     */
     @PostMapping("/api/admin/reset-demo")
     public ApiResult<Map<String, Object>> resetDemo() {
+        ctx.requireAction("admin"); // RBAC 单点校验：仅平台管理员可重置（无权限 → ForbiddenException → 403）
         store.resetToSeed();
+        store.commitAll(); // 持久化：种子态回写 biz_*（薄客户端化后 DB 权威，重启不复活脏数据）
         lockout.clearAll(); // A2：自恢复——清空防爆破锁定，避免某账号被锁后影响后续场景登录
         rateLimit.clearAll(); // A3：自恢复——清空限流计数，避免某 IP/账号被限后影响后续场景
         leader.clear(); // C4：自恢复——清空定时任务 leader 租约，避免旧租约残留影响后续接管
+        audit.log("系统", "reset-demo", "重置演示数据：内存数据仓库恢复种子态并回写 biz_*，防爆破/限流/leader 租约已清空", "success", ctx.op(), null);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("reset", true);
-        data.put("note", "内存数据仓库已重置回种子态、防爆破锁定/限流计数/定时任务 leader 租约已清空（仅内存/Redis，不回写 DB）");
+        data.put("note", "数据仓库已重置回种子态并回写 DB（持久化）、防爆破锁定/限流计数/定时任务 leader 租约已清空");
         return ApiResult.success(data);
     }
 }
