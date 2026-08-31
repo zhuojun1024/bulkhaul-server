@@ -18,9 +18,20 @@ import java.util.Map;
 public class DispatchController {
 
     private final DispatchService service;
+    private final DispatchDetailService detailService;
 
-    public DispatchController(DispatchService service) {
+    public DispatchController(DispatchService service, DispatchDetailService detailService) {
         this.service = service;
+        this.detailService = detailService;
+    }
+
+    /** Phase 4 阶段 1：详情聚合端点（Java 内存组装 7-8 集合，非 SQL join；前端详情页不再逐集合 join） */
+    @io.swagger.v3.oas.annotations.Operation(summary = "调度详情聚合（dispatch+commodity+vehicle+driver+terminals+weighings+contract+plan+settlements+exceptions+派生值）")
+    @GetMapping("/{id}/detail")
+    public ApiResult<Map<String, Object>> detail(@PathVariable String id) {
+        Map<String, Object> r = detailService.detail(id);
+        if (r == null) return ApiResult.fail("调度单不存在: " + id, "not-found");
+        return ApiResult.success(r);
     }
 
     @PostMapping("/create")
