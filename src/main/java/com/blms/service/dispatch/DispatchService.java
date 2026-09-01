@@ -195,11 +195,19 @@ public class DispatchService {
         return r;
     }
 
+
     /** 发车（等价 doDepart） */
     public Map<String, Object> depart(String dispatchId) {
         ctx.requireAction("dispatch");
         Map<String, Object> d = ctx.dispatchOf(dispatchId);
         if (d == null) return Map.of("error", "调度单不存在");
+        Map<String, Object> r = doDepart(d);
+        commit();
+        return r;
+    }
+
+    /** 发车核心（无 RBAC，供 depart/driverDepart 复用） */
+    private Map<String, Object> doDepart(Map<String, Object> d) {
         if (!"loading".equals(d.get("status"))) return Map.of("error", "调度单 " + d.get("id") + " 当前非\"装货中\"状态，无法发车");
         d.put("status", "intransit");
         d.put("progress", 10);
@@ -210,7 +218,6 @@ public class DispatchService {
         ctx.occupyResource(d);
         ctx.rollupPlan(str(d, "planId"));
         ctx.logAction("调度管理", "车辆发车", "调度单 " + d.get("id") + " 发车，预计 " + d.get("eta") + " 到达", "success");
-        commit();
         return Map.of("ok", true);
     }
 
@@ -219,6 +226,13 @@ public class DispatchService {
         ctx.requireAction("dispatch");
         Map<String, Object> d = ctx.dispatchOf(dispatchId);
         if (d == null) return Map.of("error", "调度单不存在");
+        Map<String, Object> r = doArrive(d);
+        commit();
+        return r;
+    }
+
+    /** 到达核心（无 RBAC，供 arrive/driverArrive 复用） */
+    private Map<String, Object> doArrive(Map<String, Object> d) {
         if (!"intransit".equals(d.get("status"))) return Map.of("error", "调度单 " + d.get("id") + " 当前非\"在途\"状态，无法确认到达");
         d.put("status", "unloading");
         d.put("progress", 96);
@@ -226,7 +240,6 @@ public class DispatchService {
         d.put("eta", ctx.nowPlusMinutes(ctx.randInt(30, 90)));
         ctx.rollupPlan(str(d, "planId"));
         ctx.logAction("调度管理", "到达卸货场", "调度单 " + d.get("id") + " 到达，开始卸货", "success");
-        commit();
         return Map.of("ok", true);
     }
 
@@ -235,6 +248,13 @@ public class DispatchService {
         ctx.requireAction("dispatch");
         Map<String, Object> d = ctx.dispatchOf(dispatchId);
         if (d == null) return Map.of("error", "调度单不存在");
+        Map<String, Object> r = doConfirmUnload(d);
+        commit();
+        return r;
+    }
+
+    /** 确认卸货核心（无 RBAC，供 confirmUnload/scanConfirmUnload 复用） */
+    private Map<String, Object> doConfirmUnload(Map<String, Object> d) {
         if (!"unloading".equals(d.get("status"))) return Map.of("error", "调度单 " + d.get("id") + " 当前非\"卸货中\"状态，无法确认卸货");
         d.put("status", "completed");
         d.put("unloadTime", ctx.now());
@@ -263,7 +283,6 @@ public class DispatchService {
         ctx.logAction("场站管理", "确认卸货", ctx.isRoadMode(str(d, "mode"))
                 ? "调度单 " + d.get("id") + " 确认卸货（出磅 " + outNet + " 吨，损耗 " + loss + " 吨）"
                 : "调度单 " + d.get("id") + " 确认卸货（" + d.get("mode") + " " + d.get("unitNo") + "，" + d.get("quantity") + " 吨，无磅单损耗）", "success");
-        commit();
         return Map.of("ok", true);
     }
 
@@ -316,10 +335,21 @@ public class DispatchService {
     /** 上报异常（等价 reportException → createException）：RBAC 单点校验 exception，
      *  复用 ExceptionService.createException 内部核心（事故类同步生成事故记录），返回异常单（守卫拦截时返回带 error 的 Map） */
     public Map<String, Object> reportException(String dispatchId, String description, String type, String level) {
-        ctx.requireAction("exception");
         Map<String, Object> d = ctx.dispatchOf(dispatchId);
         if (d == null) return Map.of("error", "调度单不存在");
-        return exceptionService.createException(d, description, type, level, "");
+        // 司机端走身份守卫（司机本人，source=driver）；PC 端走 RBAC exception（与前端 reportException/driverReportException 语义一致）
+        boolean isDriver = "司机".equals(ctx.op().getRole());
+        if (isDriver) {
+            String guardErr = requireDriverApp(d);
+            if (guardErr != null) return Map.of("error", guardErr);
+        } else {
+            ctx.requireAction("exception");
+        }
+        String desc = description == null ? "" : description.trim();
+        if (desc.isEmpty()) return Map.of("error", "请填写异常描述");
+        Map<String, Object> e = exceptionService.createException(d, desc, type, level, isDriver ? "driver" : "");
+        commit();
+        return e;
     }
 
     /** 恢复运输（等价 resumeDispatch） */
@@ -384,10 +414,11 @@ public class DispatchService {
         if (d == null) return Map.of("error", "调度单不存在");
         String guardErr = requireDriverApp(d);
         if (guardErr != null) return Map.of("error", guardErr);
-        Map<String, Object> r = depart(dispatchId);
+        Map<String, Object> r = doDepart(d);
         if (r.containsKey("error")) return r;
         Map<String, Object> dr = ctx.driverOf(str(d, "driverId"));
         ctx.logAction("司机端", "车辆发车", "司机 " + (dr != null ? dr.get("name") : "-") + " 确认调度单 " + d.get("id") + " 发车", "success");
+        commit();
         return Map.of("ok", true);
     }
 
@@ -397,10 +428,11 @@ public class DispatchService {
         if (d == null) return Map.of("error", "调度单不存在");
         String guardErr = requireDriverApp(d);
         if (guardErr != null) return Map.of("error", guardErr);
-        Map<String, Object> r = arrive(dispatchId);
+        Map<String, Object> r = doArrive(d);
         if (r.containsKey("error")) return r;
         Map<String, Object> dr = ctx.driverOf(str(d, "driverId"));
         ctx.logAction("司机端", "确认到达", "司机 " + (dr != null ? dr.get("name") : "-") + " 确认调度单 " + d.get("id") + " 到达卸货场站", "success");
+        commit();
         return Map.of("ok", true);
     }
 
@@ -457,9 +489,10 @@ public class DispatchService {
         if (guardErr != null) return Map.of("error", guardErr);
         String expect = loadCodeOf(d);
         if (String.valueOf(code == null ? "" : code).trim().equals(expect)) {
-            Map<String, Object> r = confirmLoad(dispatchId);
+            Map<String, Object> r = doConfirmLoad(d);
             if (r.containsKey("error")) return r;
             ctx.logAction("司机端", "扫码确认装货", "调度单 " + d.get("id") + " 扫装货码 " + expect + " 核验通过，确认装货", "success");
+            commit();
             return Map.of("ok", true);
         }
         return Map.of("error", "装货码校验失败：「" + (code == null ? "空" : code) + "」与本车次装货码 " + expect + " 不符");
@@ -473,9 +506,10 @@ public class DispatchService {
         if (guardErr != null) return Map.of("error", guardErr);
         String expect = unloadCodeOf(d);
         if (String.valueOf(code == null ? "" : code).trim().equals(expect)) {
-            Map<String, Object> r = confirmUnload(dispatchId);
+            Map<String, Object> r = doConfirmUnload(d);
             if (r.containsKey("error")) return r;
             ctx.logAction("司机端", "扫码确认卸货", "调度单 " + d.get("id") + " 扫卸货码 " + expect + " 核验通过，确认卸货", "success");
+            commit();
             return Map.of("ok", true);
         }
         return Map.of("error", "卸货码校验失败：「" + (code == null ? "空" : code) + "」与本车次卸货码 " + expect + " 不符");
