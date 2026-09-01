@@ -26,10 +26,12 @@ public class CollReadController {
 
     private final DataStore store;
     private final DataScopeService scope;
+    private final AuditLog audit;
 
-    public CollReadController(DataStore store, DataScopeService scope) {
+    public CollReadController(DataStore store, DataScopeService scope, AuditLog audit) {
         this.store = store;
         this.scope = scope;
+        this.audit = audit;
     }
 
     /**
@@ -48,6 +50,8 @@ public class CollReadController {
                                   @RequestParam(required = false) String keyword,
                                   @RequestParam(required = false) String dateFrom,
                                   @RequestParam(required = false) String dateTo) {
+        // 审计日志特例：logs 非业务集合（op_log 审计，最近 1000 时间倒序），供操作日志页经数据层读取
+        if ("logs".equals(name)) return ApiResult.success(audit.recent(1000));
         if (!DataStore.LIST_COLLS.contains(name)) {
             if (DataStore.OBJ_COLLS.contains(name)) return ApiResult.success(List.of(store.obj(name)));
             return ApiResult.fail("未知集合: " + name, "not-found");
