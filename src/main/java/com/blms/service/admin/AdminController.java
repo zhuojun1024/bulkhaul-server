@@ -177,4 +177,14 @@ public class AdminController {
     public ApiResult<Map<String, Object>> recalcAll() {
         return ApiResult.success(recalc.recalcAll());
     }
+
+    /* ===== 电子围栏参数（track 监控页，OBJ_COLL fenceConfig 整体读写） ===== */
+    @GetMapping("/fenceConfig")
+    public ApiResult<Map<String, Object>> getFenceConfig() {
+        return ApiResult.success(admin.getFenceConfig());
+    }
+    @PutMapping("/fenceConfig")
+    public ApiResult<Map<String, Object>> saveFenceConfig(@RequestBody Map<String, Object> body) {
+        return ApiResult.success(admin.saveFenceConfig(body));
+    }
 }

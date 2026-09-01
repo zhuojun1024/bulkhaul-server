@@ -430,4 +430,26 @@ public class AdminService {
         if (o instanceof Number n) return n.doubleValue();
         try { return Double.parseDouble(String.valueOf(o)); } catch (Exception e) { return 0; }
     }
+
+    /* ================= 电子围栏参数（track 监控页可配置，OBJ_COLL fenceConfig） ================= */
+    public Map<String, Object> getFenceConfig() {
+        Map<String, Object> cfg = ctx.store().obj("fenceConfig");
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("ok", true);
+        r.put("config", cfg);
+        return r;
+    }
+    public Map<String, Object> saveFenceConfig(Map<String, Object> p) {
+        ctx.requireAction("terminal");
+        Map<String, Object> cfg = ctx.store().obj("fenceConfig");
+        if (p.get("enabled") != null) cfg.put("enabled", Boolean.parseBoolean(String.valueOf(p.get("enabled"))));
+        if (p.get("deviateLimit") != null) cfg.put("deviateLimit", (int) num(p.get("deviateLimit")));
+        if (p.get("delayMinutes") != null) cfg.put("delayMinutes", (int) num(p.get("delayMinutes")));
+        ctx.logAction("在途监控", "围栏参数", "围栏参数更新：启用=" + cfg.get("enabled") + " 偏离阈值=" + cfg.get("deviateLimit") + " 超时=" + cfg.get("delayMinutes") + "分钟", "success");
+        commit();
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("ok", true);
+        r.put("config", cfg);
+        return r;
+    }
 }
